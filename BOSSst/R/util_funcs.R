@@ -3,6 +3,7 @@
 #' @param DM.hab   a list vector of design matrices for the fixed effects model (one for each species)
 #' @param N.hab.par  vector giving number of parameters for the fixed effects model for each species
 #' @param G.transect a matrix of the number of groups of animals in area covered by each transect; each row gives a separate species		
+#' @param thin.mean Vector giving average thinning proportion for each species
 #' @param Area.trans	a vector giving the proportion of a strata covered by each transect
 #' @param Area.hab	a vector of the relative areas of each strata
 #' @param Mapping	a vector mapping each transect to it's associated strata
@@ -12,12 +13,13 @@
 #' @export
 #' @keywords initial values, mcmc
 #' @author Paul B. Conn
-generate_inits_BOSSst<-function(t.steps,DM.hab,N.hab.par,G.transect,Area.trans,Area.hab,Mapping,spat.ind,grp.mean){		
+generate_inits_BOSSst<-function(t.steps,DM.hab,N.hab.par,G.transect,thin.mean=thin.mean,Area.trans,Area.hab,Mapping,spat.ind,grp.mean){		
   n.species=nrow(G.transect)
   n.cells=length(Area.hab)
   S=n.cells/t.steps
-  G.tot=apply(G.transect,1,'sum')/sum(Area.trans)*S
+  G.tot=S*apply(G.transect,1,'sum')/(sum(Area.trans)*thin.mean)
   hab=matrix(0,n.species,max(N.hab.par))
+  for(isp in 1:n.species)hab[isp,]=solve(crossprod(DM.hab[[isp]][Mapping,]),t(DM.hab[[isp]][Mapping,]))%*%log(G.transect[isp,]+1)
   Par=list(G.tot=G.tot,hab=hab,Eta=matrix(rnorm(n.species*n.cells),n.species,n.cells),
            tau.eta=runif(n.species,0.5,2),tau.eps=runif(n.species,0.5,2))
   Par$G=matrix(0,n.species,n.cells)

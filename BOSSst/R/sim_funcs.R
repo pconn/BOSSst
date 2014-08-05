@@ -31,25 +31,35 @@
 #' @author Paul B. Conn
 sim_CPIF_misID<-function(S,n.species,Data,Sim.pars,hab.formula,Q.knot,K.cpif,Area.adjust=NULL,n.transects,line.width){
   require(aster)
+  DEBUG=TRUE
+  
   if(is.null(Area.adjust))Area.adjust=rep(1,S)
   Log.area.adjust=log(Area.adjust)
   t.steps=length(Data$Grid)
   n.knots=ncol(K.cpif)
   #generate true abundance by group
   G.true=array(0,dim=c(n.species,S,t.steps))
+  Omega.true=G.true
+  Eta.true=array(0,dim=c(n.species,S*t.steps))
   for(isp in 1:n.species){
+    if(DEBUG)Sim.pars$tau.epsilon[isp]=100
     X=model.matrix(hab.formula[[isp]],Data$Grid[[1]]@data)  
     Alpha=matrix(0,n.knots,t.steps)
     Cell.probs=matrix(0,S,t.steps)
     Q=Matrix(Sim.pars$tau.eta[isp]*Q.knot)
     Alpha[,1]=rrw(Q)
-    Cell.probs[,1]=exp(Log.area.adjust+X%*%Sim.pars$Hab[[isp]]+K.cpif%*%Alpha[,1]+rnorm(S,0,1/sqrt(Sim.pars$tau.epsilon[isp])))
+    Omega.true[isp,,1]=Log.area.adjust+X%*%Sim.pars$Hab[[isp]]+K.cpif%*%Alpha[,1]+rnorm(S,0,1/sqrt(Sim.pars$tau.epsilon[isp]))
+    Cell.probs[,1]=exp(Omega.true[isp,,1])
     G.true[isp,,1]=rmultinom(1,Sim.pars$G[isp],Cell.probs[,1])
+    Eta.true[isp,1:S]=K.cpif%*%Alpha[,1]
     #plot_N_map(1,as.matrix(Lambda[,1],ncol=1),Grid=Data$Grid,highlight=c(1,2),cell.width=1,leg.title="Covariate")
     for(it in 2:t.steps){
       X=model.matrix(hab.formula[[isp]],Data$Grid[[it]]@data)  
-      Alpha[,it]=Sim.pars$rho.ar1[isp]*Alpha[,it-1]+rnorm(n.knots,0,Sim.pars$sig.ar1[isp])  
-      Cell.probs[,it]=exp(Log.area.adjust+X%*%Sim.pars$Hab[[isp]]+K.cpif%*%Alpha[,it]+rnorm(S,0,1/sqrt(Sim.pars$tau.epsilon[isp])))
+      Alpha[,it]=Sim.pars$rho.ar1[isp]*Alpha[,it-1]+rnorm(n.knots,0,Sim.pars$sig.ar1[isp]) 
+      #if(DEBUG)Alpha[,it]=0
+      Eta.true[isp,((it-1)*S+1):(it*S)]=K.cpif%*%Alpha[,it]
+      Omega.true[isp,,it]=Log.area.adjust+X%*%Sim.pars$Hab[[isp]]+K.cpif%*%Alpha[,it]+rnorm(S,0,1/sqrt(Sim.pars$tau.epsilon[isp]))
+      Cell.probs[,it]=exp(Omega.true[isp,,it])
       G.true[isp,,it]=rmultinom(1,Sim.pars$G[isp],Cell.probs[,it])
     }
   }
@@ -68,6 +78,7 @@ sim_CPIF_misID<-function(S,n.species,Data,Sim.pars,hab.formula,Q.knot,K.cpif,Are
   Obs=matrix(0,10000,4)
   colnames(Obs)=c("Transect","Photo","Obs","Group")
   N.true=array(0,dim=c(n.species,S,t.steps))
+  True.sp=0
   counter=0
   for(icell in 1:nrow(Effort)){
     for(isp in 1:n.species){
@@ -75,6 +86,7 @@ sim_CPIF_misID<-function(S,n.species,Data,Sim.pars,hab.formula,Q.knot,K.cpif,Are
         cur.g=rbinom(1,G.true[isp,Effort[icell,"Cell"],Effort[icell,"Time"]],Effort[icell,"AreaSurveyed"])
         if(cur.g>0){
           for(ig in 1:cur.g){
+            True.sp=c(True.sp,isp)
             counter=counter+1
             iphoto=round(runif(1))  # 50% photo'd is hardwired
             grp.size=rktp(1,0,Sim.pars$grp.sizes[isp]) #zero truncated poisson
@@ -108,7 +120,7 @@ sim_CPIF_misID<-function(S,n.species,Data,Sim.pars,hab.formula,Q.knot,K.cpif,Are
       if(cur.g>0)N.true[isp,cur.cell,cur.time]=rktp(1,0,Sim.pars$grp.sizes[isp],xpred=cur.g)
     }     
   }
-  Out=list(Mapping=Mapping,Effort=Effort,N.true=N.true,G.true=G.true,Obs=Obs)
+  Out=list(Mapping=Mapping,Effort=Effort,N.true=N.true,G.true=G.true,Eta.true=Eta.true,Obs=Obs,True.sp=True.sp[-1],Omega.true=Omega.true)
 }
 
 

@@ -90,7 +90,7 @@ Prior.pars=list(beta.tau=0.01,
                 beta0.tau.rw2=1,
                 beta1.tau.rw2=10)
 
-Control=list(iter=5000,burnin=10,thin=10,predict=TRUE,MH.N=rep(0.2,n.species),MH.omega=matrix(0.05,n.species,t.steps),adapt=TRUE,fix.tau.epsilon=FALSE,species.optim=TRUE)        
+Control=list(iter=30030,burnin=30,thin=30,n.adapt=5000,predict=TRUE,MH.N=rep(0.2,n.species),MH.omega=matrix(0.01,n.species,t.steps),adapt=TRUE,fix.tau.epsilon=FALSE,species.optim=TRUE)        
 
 Dat=Sim.data$Obs
 Area.hab=rep(1,S*t.steps)
@@ -105,9 +105,14 @@ Inits=NULL
 grps=TRUE
 post.loss=TRUE
 Area.trans=Sim.data$Effort[,"AreaSurveyed"]
+True.sp=Sim.data$True.sp #if not null, sets all observations to have true species values (for debugging)
+#Omega.true=Sim.data$Omega.true
+Omega.true=NULL
+Eta.true=Sim.data$Eta.true
+#Eta.true=NULL
 
 set.seed(12345)
-MCMC=hierarchical_boss_st(Dat=Sim.data$Obs,K=Data$K,Area.hab=rep(1,S*t.steps),Area.trans=Sim.data$Effort[,"AreaSurveyed"],Mapping=Sim.data$Effort[,c("Cell","Time")],DayHour=DayHour,Thin=Thin,Prop.photo=rep(0.5,n.transects),Hab.cov=Hab.cov,Obs.cov=NULL,Hab.formula=hab.formula,Cov.prior.pdf=Cov.prior.pdf,Cov.prior.parms=Cov.prior.parms,Cov.prior.fixed=Cov.prior.fixed,Cov.prior.n=Cov.prior.n,n.species=n.species,n.obs.cov=0,spat.ind=spat.ind,Psi=Psi,Inits=NULL,grps=TRUE,Control=Control,Prior.pars=Prior.pars,post.loss=TRUE)
+MCMC=hierarchical_boss_st(Dat=Sim.data$Obs,K=Data$K,Area.hab=rep(1,S*t.steps),Area.trans=Sim.data$Effort[,"AreaSurveyed"],Mapping=Sim.data$Effort[,c("Cell","Time")],DayHour=DayHour,Thin=Thin,Prop.photo=rep(0.5,n.transects),Hab.cov=Hab.cov,Obs.cov=NULL,Hab.formula=hab.formula,Cov.prior.pdf=Cov.prior.pdf,Cov.prior.parms=Cov.prior.parms,Cov.prior.fixed=Cov.prior.fixed,Cov.prior.n=Cov.prior.n,n.species=n.species,n.obs.cov=0,spat.ind=spat.ind,Psi=Psi,Inits=NULL,grps=TRUE,Control=Control,Prior.pars=Prior.pars,post.loss=TRUE,True.species=True.sp,Omega.true=Omega.true,Eta.true=Eta.true,DEBUG=TRUE)
     
 
 #Obs.data

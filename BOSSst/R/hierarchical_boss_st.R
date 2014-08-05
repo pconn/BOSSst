@@ -46,6 +46,7 @@
 #'  "burnin": number of MCMC burnin iterations;
 #'	"thin": if specified, how many iterations to skip between recorded posterior samples;
 #'	"adapt": if adapt==TRUE, adapts MCMC proposals 
+#'  "n.adapt": if adapt==TRUE, number of adapt iterations to employ (note: need to make burnin>n.adapt)
 #'  "MH.omega" A matrix providing standard deviations for Langevin-Hastings proposals (rows: species; columns: number of time steps)
 #'  "MH.N" vector of standard deviation for total abundance MH updates (1 for each species)
 #'  "fix.tau.epsilon" If TRUE, fixes tau.epsilon to 100
@@ -65,6 +66,8 @@
 #'  "beta0.tau.rw2" prior precision for knot intercepts in rw2 model
 #'  "beta1.tau.rw2" prior precision for knot slopes in rw2 model
 #' @param post.loss If TRUE, calculates observed values and posterior predictions for detection data to use with posterior predictive loss functions
+#' @param True.species if provided, this vector of true species values is used during estimation (for debugging only)
+#' @param Omega.true If provided, this array gives true Omega values for debugging
 #' @return returns a list with the following objecs: 
 #' 	MCMC: A list object containing posterior samples;
 #'  Accept: A list object indicating the number of proposals that were accepted for parameters updated via Metropolis-Hastings;
@@ -74,13 +77,12 @@
 #' @keywords areal model, data augmentation, distance sampling, mcmc, reversible jump
 #' @author Paul B. Conn \email{paul.conn@@noaa.gov} 
 #' @examples print("example analysis included in the script run_BOSS_sims.R")
-hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,Prop.photo=Prop.photo,Hab.cov,Obs.cov,Hab.formula,Cov.prior.pdf,Cov.prior.parms,Cov.prior.fixed,Cov.prior.n,n.species=1,n.obs.cov=0,spat.ind=FALSE,srr.tol=0.5,Psi,Inits=NULL,grps=FALSE,Control,adapt=TRUE,Prior.pars,post.loss=TRUE){
+hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,Prop.photo=Prop.photo,Hab.cov,Obs.cov,Hab.formula,Cov.prior.pdf,Cov.prior.parms,Cov.prior.fixed,Cov.prior.n,n.species=1,n.obs.cov=0,spat.ind=FALSE,srr.tol=0.5,Psi,Inits=NULL,grps=FALSE,Control,adapt=TRUE,Prior.pars,post.loss=TRUE,True.species=NULL,Omega.true=NULL,Eta.true=NULL,DEBUG=FALSE){
   require(mvtnorm)
 	require(Matrix)
 	require(truncnorm)
 	require(mc2d)
 	require(MCMCpack)
-	DEBUG=FALSE
 	
 	S=nrow(K)
  	n.transects=length(Area.trans)
@@ -102,6 +104,8 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
   Mapping=(Mapping[,2]-1)*S+Mapping[,1]  #convert two dimensional mapping to one dimensional mapping
 	t.steps=ceiling(max(Mapping)/S)  #currently assuming we're not projecting abundance ahead in time past the last survey
 	
+  if(is.null(True.species))Control$update.sp=TRUE
+  else Control$update.sp=FALSE
   
   #convert character entries to factors
   for(i in 1:ncol(Dat))if(is.character(Dat[,i])&length(unique(Dat[,i]))>1)Dat[,i]=as.factor(Dat[,i])
@@ -163,7 +167,7 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
   }
   
 	  
-	#if(DEBUG==TRUE)True.sp=Sim$True.species #for debugging
+	if(Control$update.sp==FALSE)True.sp=True.species #for debugging
 	Dat.num=cbind(Dat.num[,1:3],True.sp,Dat.num[,4:ncol(Dat.num)])
 	cur.colnames=colnames(Dat)
 	cur.colnames[3]="Obs"
@@ -206,7 +210,7 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
 		}
 	}  
 
-	Par=generate_inits_BOSSst(t.steps=t.steps,DM.hab=DM.hab,N.hab.par=N.hab.par,G.transect=G.transect,Area.trans=Area.trans,Area.hab=Area.hab,Mapping=Mapping,spat.ind=spat.ind,grp.mean=Cov.prior.parms[,1,1])	
+	Par=generate_inits_BOSSst(t.steps=t.steps,DM.hab=DM.hab,N.hab.par=N.hab.par,G.transect=G.transect,thin.mean=apply(Thin,1,'mean'),Area.trans=Area.trans,Area.hab=Area.hab,Mapping=Mapping,spat.ind=spat.ind,grp.mean=Cov.prior.parms[,1,1])	
   Par$Psi=Psi[,,sample(dim(Psi)[3],1)]
   
   if(is.null(Inits)==FALSE){  #replace random inits with user provided inits for all parameters specified
@@ -218,7 +222,8 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
 	#start Omega out at a compatible level
   for(isp in 1:n.species){
     if(ncol(Par$hab)<ncol(DM.hab[[isp]]))cat('Error: Abundance intensity model has parameter/formula mismatch')
-    Par$Omega[isp,]=DM.hab[[isp]]%*%Par$hab[isp,1:N.hab.par[isp]]+Par$Eta[isp,]+rnorm(ncol(Par$Omega),0,1/sqrt(Par$tau.eps[isp]))+log(Area.hab)
+    #Par$Omega[isp,]=DM.hab[[isp]]%*%Par$hab[isp,1:N.hab.par[isp]]+Par$Eta[isp,]+rnorm(ncol(Par$Omega),0,1/sqrt(Par$tau.eps[isp]))+log(Area.hab)
+    Par$Omega[isp,]=DM.hab[[isp]]%*%Par$hab[isp,1:N.hab.par[isp]]+log(Area.hab)
   }
   if(length(Par$tau.eps)!=n.species)cat('Error: length of initial value vector for tau.eps should be equal to # of species')
   
@@ -255,15 +260,15 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
 	cur.iter=Control$adapt
   adapt=1
 
-	if(adapt==TRUE){
-		cat('\n Beginning adapt phase \n')
-		Out=mcmc_boss_st(Par=Par,Dat=Dat,Psi=Psi,cur.iter=Control$adapt,adapt=1,Control=Control,DM.hab=DM.hab,Prior.pars=Prior.pars,Meta=Meta)
+#	if(adapt==TRUE){
+		#cat('\n Beginning adapt phase \n')
+		#Out=mcmc_boss_st(Par=Par,Dat=Dat,Psi=Psi,cur.iter=Control$adapt,adapt=1,Control=Control,DM.hab=DM.hab,Prior.pars=Prior.pars,Meta=Meta,Omega.true=Omega.true,Eta.true=Eta.true)
 		cat('\n Beginning MCMC phase \n')
-		Out=mcmc_boss_st(Par=Par,Dat=Dat,Psi=Psi,cur.iter=Control$iter,adapt=0,Control=Out$Control,DM.hab=DM.hab,Prior.pars=Prior.pars,Meta=Meta)
-	}
-	else{
-		cat('\n Beginning MCMC phase \n')
-		Out=mcmc_boss(Par=Par,Dat=Dat,Psi=Psi,cur.iter=Control$iter,adapt=0,Control=Control,DM.hab.pois=DM.hab.pois,DM.hab.bern=DM.hab.bern,Q=Q,Prior.pars=Prior.pars,Meta=Meta)
-	}
+		Out=mcmc_boss_st(Par=Par,Dat=Dat,Psi=Psi,cur.iter=Control$iter,adapt=Control$adapt,Control=Control,DM.hab=DM.hab,Prior.pars=Prior.pars,Meta=Meta,Omega.true=Omega.true,Eta.true=Eta.true)
+#	}
+#	else{
+#		cat('\n Beginning MCMC phase \n')
+#		Out=mcmc_boss(Par=Par,Dat=Dat,Psi=Psi,cur.iter=Control$iter,adapt=0,Control=Control,DM.hab.pois=DM.hab.pois,DM.hab.bern=DM.hab.bern,Q=Q,Prior.pars=Prior.pars,Meta=Meta,Omega.true=Omega.true,Eta.true=Eta.true)
+	#}
 	Out	
 }

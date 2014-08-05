@@ -22,6 +22,7 @@
 #'	"iter": number of MCMC iterations;
 #'  "burnin": number of MCMC burnin iterations;
 #'  "adapt" if true, adapts MH proposals
+#'  "n.adapt" If adapt==TRUE, number of iterations to apply adapt algorithm (note: burnin shous be > n.adapt)
 #'	"thin": if specified, how many iterations to skip between recorded posterior samples;
 #'  "MH.omega" A matrix providing standard deviations for Langevin-Hastings proposals (rows: species, columns: time steps)
 #'  "MH.G" A vector giving standard deviation for group abundance MH updates
@@ -62,6 +63,7 @@
 #'  "Cov.prior.n" 	(#species X #covariates) Matrix giving number of parameters in each covariate pdf 
 #'  "N.hab.par"	    A vector specifying the number of parameters needed for each species' Poisson abundance model
 #'  "post.loss"  If TRUE, observed and predicted detections are compiled for posterior predictive loss 
+#' @param Omega.true If provided, a vector of true Omega values for debugging
 #' @return returns a list with the following objects: 
 #' 	"MCMC": An 'mcmc' object (see 'coda' R package) containing posterior samples;
 #'  "Accept": A list object indicating the number of proposals that were accepted for parameters updated via Metropolis- or Langevin-Hastings algorithms;
@@ -76,7 +78,7 @@
 #' @keywords areal, data augmentation, distance sampling, mcmc, reversible jump
 #' @author Paul B. Conn
 
-mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta){	
+mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta,Omega.true=NULL,Eta.true=NULL){	
 	#require(mvtnorm)
 	#require(Matrix)
 	#require(truncnorm)
@@ -114,6 +116,12 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
  	  Tmp.thin
  	} 
     
+  if(is.null(Omega.true)==FALSE){
+    for(isp in 1:Meta$n.species){
+      Par$Omega[isp,]=as.numeric(Omega.true[isp,,])
+    }
+  }
+  
 	#initialize pi
   Log.area.adjust=log(Meta$Area.hab)
   One=matrix(1,Meta$t.steps,1)
@@ -173,6 +181,8 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 	Pred.N=array(0,dim=c(Meta$n.species,mcmc.length,Meta$n.transects))
 	Obs.N=Pred.N
   Old.accept.G=Accept$G
+  Old.accept.omega=Accept$Omega
+  
 
 	Obs.det=NA
 	Pred.det=NA
@@ -220,6 +230,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
   for(isp in 1:Meta$n.species)Alpha[isp,]=rrw(Par$tau.eta*Q) #initial values for space-time random effects
   #Eta=K%*%Alpha
   Eta=matrix(0,Meta$n.species,n.ST) #start Eta at 0
+  if(is.null(Eta.true)==FALSE)Eta=Eta.true
   #K.obs=K[Which.obs,]
   #K.obs.t=t(K.obs)
   K.t=t(K)
@@ -282,8 +293,9 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
   Dat2[,"Species"]=factor(Dat2[,"Species"],levels=c(1:Meta$n.species))  
 	
 	PROFILE=FALSE  #outputs time associated with updating different groups of parameters
-	DEBUG=FALSE
+	DEBUG=TRUE
 	if(DEBUG){
+    #Par$Eta=0*Par$Eta
     #set initial values as in "spatpred" GLMM for comparison
     #Which.pos=which(Meta$G.transect[1,]>0)
     #Offset=Meta$Area.hab[Mapping]*Sampled.area.by.strata
@@ -301,16 +313,23 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 	##################################################
 	for(iiter in 1:cur.iter){
 		cat(paste('\n ', iiter))
+		if(DEBUG){
+		  Par$hab[,1]=c(10,1,7,4)
+		  Par$hab[,2]=c(-10,2,-4,-5)
+		}
 		for(isp in 1:Meta$n.species){		
 		  #update total abundance
 		  log.G.prop=log.G[isp]+rnorm(1,0,Control$MH.N[isp])
 		  Cur.thin=get_thin(Meta$Thin,Thin.pl,isp,thin.pl)*Meta$Area.trans
 		  if(log.G.prop>log.Mtp1[isp]){
 		    Cur.p=colSums(Pi.obs[[isp]]*Cur.thin)
-		    G.old=exp(log.G[isp])
-		    G.prop=exp(log.G.prop)
-		    old.lik=t.steps*lfactorial(G.old)-sum(lfactorial(G.old-Ct[isp,])-(G.old-Ct[isp,])*log(1-Cur.p))
-		    new.lik=t.steps*lfactorial(G.prop)-sum(lfactorial(G.prop-Ct[isp,])-(G.prop-Ct[isp,])*log(1-Cur.p))
+		    G.old=round(exp(log.G[isp]))
+		    G.prop=round(exp(log.G.prop))
+        
+        #old.lik=sum(dbinom(Ct[isp,],G.old,Cur.p,log=TRUE))
+        #new.lik=sum(dbinom(Ct[isp,],G.prop,Cur.p,log=TRUE))
+			  old.lik=Meta$t.steps*lfactorial(G.old)-sum(lfactorial(G.old-Ct[isp,])-(G.old-Ct[isp,])*log(1-Cur.p))
+		    new.lik=Meta$t.steps*lfactorial(G.prop)-sum(lfactorial(G.prop-Ct[isp,])-(G.prop-Ct[isp,])*log(1-Cur.p))
 		    if(runif(1)<exp(new.lik-old.lik)){
 		      Accept$G[isp]=Accept$G[isp]+1
 		      log.G[isp]=log.G.prop
@@ -322,47 +341,63 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 		    cat(paste("G: ", (Sys.time()-st),'\n'))
 		    st=Sys.time()
 		  } 
-		  
+      
  			#update omega (sampled cells)
 			Omega.pred=DM.hab.sampled[[isp]]%*%Par$hab[isp,]+Par$Eta[isp,Sampled]+Log.area.adjust[Sampled]
 			sd=sqrt(1/Par$tau.eps[isp])
- 			for(it in 1:t.steps){
- 			  #if(iiter==56 & isp==2 & it==12){
- 			  #  print(paste("time ",it,"\n"))
- 			  #}
- 			  
-			  if(Nt.obs[it]>0){
-			    Prop=Omega.list[[isp]][[it]]+Dt.old[[isp]][[it]]+rnorm(Nt.obs[it],0,Control$MH.omega[isp,it])
-			    Prop.exp=exp(Prop)
-			    Pi.prop=Prop.exp/sum(Prop.exp)
-          unobs.G=sum(Par$G[isp,Sampled[Time.indices[it,1]:Time.indices[it,2]]])-sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]])
-			    post.new=sum(dnorm(Prop,Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.prop)+log(Cur.thin)))+unobs.G*log(1-sum(Pi.prop*Cur.thin[Time.indices[it,1]:Time.indices[it,2]]))
-			    post.old=sum(dnorm(Omega.list[[isp]][[it]],Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.list[[isp]][[it]])+log(Cur.thin)))+log(1-sum(Pi.list[[isp]][[it]]*Cur.thin[Time.indices[it,1]:Time.indices[it,2]]))*unobs.G
-			    Temp=Prop-Omega.list[[isp]][[it]]-Dt.old[[isp]][[it]]
-			    jump.old.to.new=-0.5/Control$MH.omega[isp,it]^2*Temp%*%Temp
-			    Dstar=0.5*Control$MH.omega[isp,it]^2*d_logP_omega(Omega=Prop,Count=Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]],Mu=Omega.pred[Time.indices[it,1]:Time.indices[it,2]],tau=Par$tau.eps,G.sum=sum(Par$G[isp,Sampled[Time.indices[it,1]:Time.indices[it,2]]]),Cur.thin=Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
-			    Temp=Omega.list[[isp]][[it]]-Prop-Dstar
-			    jump.new.to.old=-0.5/Control$MH.omega[isp,it]^2*Temp%*%Temp
-			    if(runif(1)<exp(post.new-post.old+jump.new.to.old-jump.old.to.new)){
-			      Omega.list[[isp]][[it]]=Prop
-			      Pi.list[[isp]][[it]]=Pi.prop
-			      Accept$Omega[isp,it]=Accept$Omega[isp,it]+1
-			      Dt.old[[isp]][[it]]=Dstar
-			    }  
+			if(is.null(Omega.true)){
+			  for(it in 1:t.steps){
+			    #if(iiter==56 & isp==2 & it==12){
+			    #  print(paste("time ",it,"\n"))
+			    #}
+			    if(iiter==30000){
+            crap=1
+			    }
+			    if(Nt.obs[it]>0){
+			      Prop=Omega.list[[isp]][[it]]+Dt.old[[isp]][[it]]+rnorm(Nt.obs[it],0,Control$MH.omega[isp,it])
+			      Prop.exp=exp(Prop)
+			      Pi.prop=Prop.exp/sum(Prop.exp)
+			      unobs.G=sum(Par$G[isp,Sampled[Time.indices[it,1]:Time.indices[it,2]]])-sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]])
+			      post.new=sum(dnorm(Prop,Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.prop)+log(Cur.thin[Time.indices[it,1]:Time.indices[it,2]])))+unobs.G*log(1-sum(Pi.prop*Cur.thin[Time.indices[it,1]:Time.indices[it,2]]))
+			      post.old=sum(dnorm(Omega.list[[isp]][[it]],Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.list[[isp]][[it]])+log(Cur.thin[Time.indices[it,1]:Time.indices[it,2]])))+log(1-sum(Pi.list[[isp]][[it]]*Cur.thin[Time.indices[it,1]:Time.indices[it,2]]))*unobs.G
+			      Temp=Prop-Omega.list[[isp]][[it]]-Dt.old[[isp]][[it]]
+			      jump.old.to.new=-0.5/Control$MH.omega[isp,it]^2*Temp%*%Temp
+			      Dstar=0.5*Control$MH.omega[isp,it]^2*d_logP_omega(Omega=Prop,Count=Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]],Mu=Omega.pred[Time.indices[it,1]:Time.indices[it,2]],tau=Par$tau.eps,G.sum=sum(Par$G[isp,Sampled[Time.indices[it,1]:Time.indices[it,2]]]),Cur.thin=Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
+			      Temp=Omega.list[[isp]][[it]]-Prop-Dstar
+			      jump.new.to.old=-0.5/Control$MH.omega[isp,it]^2*Temp%*%Temp
+			      if(runif(1)<exp(post.new-post.old+jump.new.to.old-jump.old.to.new)){
+			        Omega.list[[isp]][[it]]=Prop
+			        Pi.list[[isp]][[it]]=Pi.prop
+			        Accept$Omega[isp,it]=Accept$Omega[isp,it]+1
+			        Dt.old[[isp]][[it]]=Dstar
+			      }  
+			    }
 			  }
+       
+			  Par$Omega[isp,Sampled]=unlist(Omega.list[[isp]])
+			  #Omega[Which.obs]=stack_list_vector(Omega.list) #convert back to vector format
+			  #simulate omega for unobserved times and places
+			  Par$Omega[isp,-Sampled]=rnorm(n.ST-n.unique,DM.hab.unsampled[[isp]]%*%Par$hab[isp,]+Par$Eta[isp,-Sampled]+Log.area.adjust[-Sampled],sd)
+			  #compute Pi.obs (need for abundance updates)
+			  Omega.exp[isp,]=exp(Par$Omega[isp,])
+			  D=Diagonal(x=Omega.exp[isp,])
+			  Pi[[isp]]=t(t(One)%*%solve((t(Y)%*%D%*%Y),t(Y)))*Omega.exp[isp,]
+			  Pi.mat[[isp]]=Diagonal(x=as.numeric(Pi[[isp]]))%*%Y
+			  Pi.obs[[isp]]=Pi.mat[[isp]][Sampled,] 
+			  Pi.obs.stnd[[isp]]=Pi.obs[[isp]]%*%Diagonal(x=1/colSums(Pi.obs[[isp]]))   
+			  Pi.obs.stnd.mat[isp,]=rowSums(Pi.obs.stnd[[isp]])  #needed for species updates
 			}
-			Par$Omega[isp,Sampled]=unlist(Omega.list[[isp]])
-			#Omega[Which.obs]=stack_list_vector(Omega.list) #convert back to vector format
-			#simulate omega for unobserved times and places
-			Par$Omega[isp,-Sampled]=rnorm(n.ST-n.unique,DM.hab.unsampled[[isp]]%*%Par$hab[isp,]+Par$Eta[isp,-Sampled]+Log.area.adjust[-Sampled],sd)
-			#compute Pi.obs (need for abundance updates)
-			Omega.exp[isp,]=exp(Par$Omega[isp,])
-			D=Diagonal(x=Omega.exp[isp,])
-			Pi[[isp]]=t(t(One)%*%solve((t(Y)%*%D%*%Y),t(Y)))*Omega.exp[isp,]
-			Pi.mat[[isp]]=Diagonal(x=as.numeric(Pi[[isp]]))%*%Y
-			Pi.obs[[isp]]=Pi.mat[[isp]][Sampled,] 
-			Pi.obs.stnd[[isp]]=Pi.obs[[isp]]%*%Diagonal(x=1/colSums(Pi.obs[[isp]]))   
-			Pi.obs.stnd.mat[isp,]=rowSums(Pi.obs.stnd[[isp]])  #needed for species updates
+			if(is.null(Omega.true)==FALSE){
+        Par$Omega[isp,]=as.numeric(Omega.true[isp,,])
+        Omega.exp[isp,]=exp(Par$Omega[isp,])
+        D=Diagonal(x=Omega.exp[isp,])
+        Pi[[isp]]=t(t(One)%*%solve((t(Y)%*%D%*%Y),t(Y)))*Omega.exp[isp,]
+        Pi.mat[[isp]]=Diagonal(x=as.numeric(Pi[[isp]]))%*%Y
+        Pi.obs[[isp]]=Pi.mat[[isp]][Sampled,] 
+        Pi.obs.stnd[[isp]]=Pi.obs[[isp]]%*%Diagonal(x=1/colSums(Pi.obs[[isp]]))   
+        Pi.obs.stnd.mat[isp,]=rowSums(Pi.obs.stnd[[isp]])  #needed for species updates
+			}			  
+
 			
       
 		  if(PROFILE==TRUE){
@@ -372,9 +407,11 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 
 			#update tau_epsilon	 (precision for exchangeable errors on classification odds)
 			if(Control$fix.tau.epsilon==FALSE){
-			  Diff=Par$Omega[isp,Sampled]-Omega.pred[isp,]
+			  Diff=Par$Omega[isp,Sampled]-Omega.pred
 			  Par$tau.eps[isp] <- rgamma(1,n.unique/2 + Prior.pars$a.eps, as.numeric(crossprod(Diff,Diff))*0.5 + Prior.pars$b.eps)
 			}
+      if(DEBUG)Par$tau.eps[isp]=100
+        
 			if(PROFILE==TRUE){
 			  cat(paste("Tau epsilon: ", (Sys.time()-st),'\n'))
 			  st=Sys.time()
@@ -383,6 +420,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
       #update fixed effect parameters
 			Par$hab[isp,1:Meta$N.hab.par[isp]]=t(rmvnorm(1,XpXinvXp[[isp]]%*%(Par$Omega[isp,Sampled]-Par$Eta[isp,Sampled]-Log.area.adjust[Sampled]),XpXinv[[isp]]/(Par$tau.eps[isp]+Prior.pars$beta.tau)))
 
+      
 			if(PROFILE==TRUE){
 			  cat(paste("fixed effects: ", (Sys.time()-st),'\n'))
 			  st=Sys.time()
@@ -400,13 +438,13 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 			  M.eta <- solve(V.eta.inv,Par$tau.eps[isp]*K.t%*%Dat.minus.Exp)
 			  Alpha[isp,] <- as.numeric(M.eta + solve(chol(V.eta.inv), rnorm(length(M.eta),0,1)))
 			  Alpha[isp,]=as.numeric(Alpha[isp,]-V.eta.inv %*% A.t %*% solve(A %*% V.eta.inv %*% A.t,A%*%Alpha[isp,]))    
-			  Par$Eta[isp,]=as.numeric(K%*%(X.rw2%*%Beta.rw2[isp,]+Alpha[isp,]))
-			  
+			  #Par$Eta[isp,]=as.numeric(K%*%(X.rw2%*%Beta.rw2[isp,]+Alpha[isp,]))
+			  Par$Eta[isp,]=as.numeric(K%*%(Alpha[isp,]))	
+        if(is.null(Eta.true)==FALSE)Par$Eta[isp,]=Eta.true[isp,]
 			  #update tau.eta
 			  Par$tau.eta[isp] <- rgamma(1, length(M.eta)*0.5 + Prior.pars$a.eta, as.numeric(crossprod(Alpha[isp,],Q %*% Alpha[isp,])*0.5) + Prior.pars$b.eta)    
-			  #tau.eta=100
 			}
-
+      
 			if(PROFILE==TRUE){
 			  cat(paste("spatio-temporal effects: ", (Sys.time()-st),'\n'))
 			  st=Sys.time()
@@ -414,67 +452,70 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 		}
     
 
-    if(length(Which.no.photo)>0){
-      ########## update species for observations without photos
-      Lambda=Pi.obs.stnd.mat*Par$G.tot
-      Dat[Which.no.photo,"Species"]=sapply(Dat[Which.no.photo,"Transect"],sample_nophoto_sp,Lam=Lambda,n.sp=Meta$n.species)
-      Dat2[,"Species"]=Dat[,"Species"]
-      Meta$G.transect=xtabs(~Species+Transect,data=Dat2)  #recalculate number of groups per species/transect combo
-      ########## update ind. covariates for observations without photos  #############
-      if(Meta$n.ind.cov>0){
-        for(icov in 1:Meta$n.ind.cov){
-          if(Meta$Cov.prior.pdf[icov]=='poisson_ln' | Meta$Cov.prior.pdf[icov]=='pois1_ln')cur.RE=RE.cov[,icov]
-          else cur.RE=0
-          for(isp in 1:Meta$n.species){
-            I.cur=(Dat[,"Photo"]==0)*(Dat[,"Species"]==isp)
-            if(length(cur.RE>0))cur.RE=cur.RE[I.cur==1]
-            Dat[I.cur==1,4+n.obs.cov+icov]=switch_sample(n=sum(I.cur),pdf=Meta$Cov.prior.pdf[icov],cur.par=Par$Cov.par[isp,1:Meta$Cov.prior.n[isp,icov],icov],RE=cur.RE)
-          }
-        }
-      }	
-    }
-    
-
-		##### update true species for observed animals ######
-    if(Control$species.optim==FALSE){
-      Which.sampled=sample(n.photo,n.misID.updates) #replace needs to be false here or there's issues with using Old.sp
-      Old.sp=Dat[Which.photo[Which.sampled],"Species"]
-      Prop.sp=sample(c(1:Meta$n.species),n.misID.updates,replace=TRUE)
-      Cur.obs=Dat[Which.photo[Which.sampled],"Obs"]
-      #covariate contributions
-      MH=sapply(Index.misID,"get_mat_entries",Mat=Cov.logL,Row=Cov.pl[Which.sampled],Col=Prop.sp)-sapply(Index.misID,"get_mat_entries",Mat=Cov.logL,Row=Cov.pl[Which.sampled],Col=Old.sp)
-      #confusion matrix contributions
-      if(Meta$misID)MH=MH+log(sapply(Index.misID,"get_mat_entries",Mat=Par$Psi,Row=Prop.sp,Col=Dat[Which.photo[Which.sampled],"Obs"]))-log(sapply(Index.misID,"get_mat_entries",Mat=Par$Psi,Row=Dat[Which.photo[Which.sampled],"Species"],Col=Dat[Which.photo[Which.sampled],"Obs"]))
-      #Poisson abundance model contributions (new state)
-      MH=MH+log(sapply(Index.misID,"get_mat_entries",Mat=Lambda.trans,Row=Prop.sp,Col=Dat[Which.photo[Which.sampled],"Transect"]))
-      Rsamp=runif(n.misID.updates)
-      for(isamp in 1:n.misID.updates){
-        mh=MH[isamp]-log(Lambda.trans[Dat[Which.photo[Which.sampled[isamp]],"Species"],Dat[Which.photo[Which.sampled[isamp]],"Transect"]])
-        if(Rsamp[isamp]<exp(mh)){
-          Meta$G.transect[Old.sp[isamp],Dat[Which.photo[Which.sampled[isamp]],"Transect"]]=Meta$G.transect[Old.sp[isamp],Dat[Which.photo[Which.sampled[isamp]],"Transect"]]-1
-          Meta$G.transect[Prop.sp[isamp],Dat[Which.photo[Which.sampled[isamp]],"Transect"]]=Meta$G.transect[Prop.sp[isamp],Dat[Which.photo[Which.sampled[isamp]],"Transect"]]+1
-          Dat[Which.photo[Which.sampled[isamp]],"Species"]=Prop.sp[isamp]
-        }
-      }
-    }
-    
-    if(Control$species.optim==TRUE){
-      if(Meta$n.ind.cov>1)paste("ERROR: Control$species.optim==TRUE currently only implemented for one covariate (group size)")
-      Which.sampled=sample(n.photo,n.misID.updates) #replace needs to be false here or there's issues with using Old.sp
-      #lambda contribution
-      Species.cell.probs=Lambda[,Dat[Which.photo[Which.sampled],"Transect"]]
-      #confusion matrix contributions
-      Species.cell.probs=Species.cell.probs*Par$Psi[,Dat[Which.photo[Which.sampled],"Obs"]]
-      #covariate contributions: GROUP ONLY RIGHT NOW
-      for(isp in 1:Meta$n.species)Species.cell.probs[isp,]=Species.cell.probs[isp,]*exp(sapply(Index.misID,"get_mat_entries",Mat=Cov.logL,Row=Cov.pl[Which.sampled],Col=rep(isp,n.misID.updates)))
-      #Species.cell.probs=Species.cell.probs*t(exp(Cov.logL))[,Dat[Which.photo[Which.sampled],"Group"]]
-      Dat[Which.photo[Which.sampled],"Species"]=apply(Species.cell.probs,2,"sample_species",n.species=n.species)
-    }		
-		if(PROFILE==TRUE){
-		  cat(paste("True species: ", (Sys.time()-st),'\n'))
-		  st=Sys.time()
+		if(Control$update.sp==TRUE){  
+		  if(length(Which.no.photo)>0){
+		    ########## update species for observations without photos
+		    Lambda=Pi.obs.stnd.mat*Par$G.tot
+		    Dat[Which.no.photo,"Species"]=sapply(Dat[Which.no.photo,"Transect"],sample_nophoto_sp,Lam=Lambda,n.sp=Meta$n.species)
+		    Dat2[,"Species"]=Dat[,"Species"]
+		    Meta$G.transect=xtabs(~Species+Transect,data=Dat2)  #recalculate number of groups per species/transect combo
+		    ########## update ind. covariates for observations without photos  #############
+		    if(Meta$n.ind.cov>0){
+		      for(icov in 1:Meta$n.ind.cov){
+		        if(Meta$Cov.prior.pdf[icov]=='poisson_ln' | Meta$Cov.prior.pdf[icov]=='pois1_ln')cur.RE=RE.cov[,icov]
+		        else cur.RE=0
+		        for(isp in 1:Meta$n.species){
+		          I.cur=(Dat[,"Photo"]==0)*(Dat[,"Species"]==isp)
+		          if(length(cur.RE>0))cur.RE=cur.RE[I.cur==1]
+		          Dat[I.cur==1,4+n.obs.cov+icov]=switch_sample(n=sum(I.cur),pdf=Meta$Cov.prior.pdf[icov],cur.par=Par$Cov.par[isp,1:Meta$Cov.prior.n[isp,icov],icov],RE=cur.RE)
+		        }
+		      }
+		    }	
+		  }
+		  
+		  
+		  ##### update true species for observed animals ######
+		  if(Control$species.optim==FALSE){
+		    Which.sampled=sample(n.photo,n.misID.updates) #replace needs to be false here or there's issues with using Old.sp
+		    Old.sp=Dat[Which.photo[Which.sampled],"Species"]
+		    Prop.sp=sample(c(1:Meta$n.species),n.misID.updates,replace=TRUE)
+		    Cur.obs=Dat[Which.photo[Which.sampled],"Obs"]
+		    #covariate contributions
+		    MH=sapply(Index.misID,"get_mat_entries",Mat=Cov.logL,Row=Cov.pl[Which.sampled],Col=Prop.sp)-sapply(Index.misID,"get_mat_entries",Mat=Cov.logL,Row=Cov.pl[Which.sampled],Col=Old.sp)
+		    #confusion matrix contributions
+		    if(Meta$misID)MH=MH+log(sapply(Index.misID,"get_mat_entries",Mat=Par$Psi,Row=Prop.sp,Col=Dat[Which.photo[Which.sampled],"Obs"]))-log(sapply(Index.misID,"get_mat_entries",Mat=Par$Psi,Row=Dat[Which.photo[Which.sampled],"Species"],Col=Dat[Which.photo[Which.sampled],"Obs"]))
+		    #Poisson abundance model contributions (new state)
+        
+		    MH=MH+log(sapply(Index.misID,"get_mat_entries",Mat=Lambda.trans,Row=Prop.sp,Col=Dat[Which.photo[Which.sampled],"Transect"]))
+		    Rsamp=runif(n.misID.updates)
+		    for(isamp in 1:n.misID.updates){
+		      mh=MH[isamp]-log(Lambda.trans[Dat[Which.photo[Which.sampled[isamp]],"Species"],Dat[Which.photo[Which.sampled[isamp]],"Transect"]])
+		      if(Rsamp[isamp]<exp(mh)){
+		        Meta$G.transect[Old.sp[isamp],Dat[Which.photo[Which.sampled[isamp]],"Transect"]]=Meta$G.transect[Old.sp[isamp],Dat[Which.photo[Which.sampled[isamp]],"Transect"]]-1
+		        Meta$G.transect[Prop.sp[isamp],Dat[Which.photo[Which.sampled[isamp]],"Transect"]]=Meta$G.transect[Prop.sp[isamp],Dat[Which.photo[Which.sampled[isamp]],"Transect"]]+1
+		        Dat[Which.photo[Which.sampled[isamp]],"Species"]=Prop.sp[isamp]
+		      }
+		    }
+		  }
+		  
+		  if(Control$species.optim==TRUE){
+		    if(Meta$n.ind.cov>1)paste("ERROR: Control$species.optim==TRUE currently only implemented for one covariate (group size)")
+		    Which.sampled=sample(n.photo,n.misID.updates) #replace needs to be false here or there's issues with using Old.sp
+		    #lambda contribution
+		    Species.cell.probs=Lambda[,Dat[Which.photo[Which.sampled],"Transect"]]
+		    #confusion matrix contributions
+		    Species.cell.probs=Species.cell.probs*Par$Psi[,Dat[Which.photo[Which.sampled],"Obs"]]
+		    #covariate contributions: GROUP ONLY RIGHT NOW
+		    for(isp in 1:Meta$n.species)Species.cell.probs[isp,]=Species.cell.probs[isp,]*exp(sapply(Index.misID,"get_mat_entries",Mat=Cov.logL,Row=Cov.pl[Which.sampled],Col=rep(isp,n.misID.updates)))
+		    #Species.cell.probs=Species.cell.probs*t(exp(Cov.logL))[,Dat[Which.photo[Which.sampled],"Group"]]
+		    Dat[Which.photo[Which.sampled],"Species"]=apply(Species.cell.probs,2,"sample_species",n.species=n.species)
+		  }		
+		  if(PROFILE==TRUE){
+		    cat(paste("True species: ", (Sys.time()-st),'\n'))
+		    st=Sys.time()
+		  }
 		}
-    #if(iiter==1568)cat("\n made it 1 \n")
+		#if(iiter==1568)cat("\n made it 1 \n")
     
 		########## recalculate abundance totals
     Dat2[,"Group"]=Dat[,"Group"]
@@ -585,17 +626,17 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 		#if(iiter==1568)cat("\n made it 4 \n")
 		
 		
-		if(Control$adapt){
-			if(iiter%%100==0){
+		if(Control$adapt & iiter<=Control$n.adapt){
+			if(iiter%%10==0){
 				for(ipar in 1:Meta$n.species){
-          if((Accept$G[ipar]-Old.accept.G[ipar])<30)Control$MH.N[ipar]=Control$MH.N[ipar]*0.95
-          if((Accept$G[ipar]-Old.accept.G[ipar])>40)Control$MH.N[ipar]=Control$MH.N[ipar]*1.053
+          if((Accept$G[ipar]-Old.accept.G[ipar])<3)Control$MH.N[ipar]=Control$MH.N[ipar]*0.95
+          if((Accept$G[ipar]-Old.accept.G[ipar])>4)Control$MH.N[ipar]=Control$MH.N[ipar]*1.053
 					for(i in 1:Meta$t.steps){
-					  if(Accept$Omega[ipar,i]<30)Control$MH.omega[ipar,i]=Control$MH.omega[ipar,i]*.95
-					  if(Accept$Omega[ipar,i]>40)Control$MH.omega[ipar,i]=Control$MH.omega[ipar,i]*1.053
+					  if((Accept$Omega[ipar,i]-Old.accept.omega[ipar,i])<3)Control$MH.omega[ipar,i]=Control$MH.omega[ipar,i]*.95
+					  if((Accept$Omega[ipar,i]-Old.accept.omega[ipar,i])>4)Control$MH.omega[ipar,i]=Control$MH.omega[ipar,i]*1.053
 				  }          
 				}
-				Accept$Omega=Accept$Omega*0
+				Old.accept.omega=Accept$Omega
         Old.accept.G=Accept$G
 			}
 		}
