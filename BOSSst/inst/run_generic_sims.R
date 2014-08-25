@@ -16,7 +16,7 @@ if(GENERATE==TRUE){
   for(igen in 1:1){  #loop over generating model to generate data sets
     for(itrans in 1:1){ #loop over number of transects in each cell
       for(isim in 1:n.sims){
-        Sim.data=sim_data_generic(n.species=4,S=S,t.steps=t.steps,n.transects=N.transects[itrans],line.width=line.width,buffer=0,delta=Delta[isim])
+        Sim.data=sim_data_generic2(n.species=4,S=S,t.steps=t.steps,n.transects=N.transects[itrans],line.width=line.width,buffer=0,delta=Delta[isim])
         #fname=paste("simdata_gen",Model.list[igen],"_trans",N.transects[itrans],"_sim",isim,sep='')
         #save(Sim.data,file=paste("./sim_generic_data/",fname,sep=''))
       }
@@ -82,7 +82,7 @@ Cov.prior.n=matrix(2,n.species,1)
 spat.ind=FALSE
 srr.tol=0.5
 
-Prior.pars=list(beta.tau=0.01,
+Prior.pars=list(beta.tau=0.0001,
                 a.eps=1,
                 b.eps=0.01,
                 a.eta=1,
@@ -90,7 +90,7 @@ Prior.pars=list(beta.tau=0.01,
                 beta0.tau.rw2=1,
                 beta1.tau.rw2=10)
 
-Control=list(iter=30030,burnin=30,thin=30,n.adapt=5000,predict=TRUE,MH.N=rep(0.2,n.species),MH.omega=matrix(0.01,n.species,t.steps),adapt=TRUE,fix.tau.epsilon=FALSE,species.optim=TRUE)        
+Control=list(iter=15000,burnin=3000,thin=10,n.adapt=3000,predict=TRUE,MH.N=rep(0.2,n.species),MH.omega=matrix(0.01,n.species,t.steps),adapt=TRUE,fix.tau.epsilon=FALSE,species.optim=TRUE)        
 
 Dat=Sim.data$Obs
 Area.hab=rep(1,S*t.steps)
@@ -106,13 +106,16 @@ grps=TRUE
 post.loss=TRUE
 Area.trans=Sim.data$Effort[,"AreaSurveyed"]
 True.sp=Sim.data$True.sp #if not null, sets all observations to have true species values (for debugging)
+#True.sp=NULL
 #Omega.true=Sim.data$Omega.true
 Omega.true=NULL
-Eta.true=Sim.data$Eta.true
-#Eta.true=NULL
+#Eta.true=Sim.data$Eta.true
+Eta.true=NULL
+Alpha.true=Sim.data$Alpha.true
+#Alpha.true=NULL
 
 set.seed(12345)
-MCMC=hierarchical_boss_st(Dat=Sim.data$Obs,K=Data$K,Area.hab=rep(1,S*t.steps),Area.trans=Sim.data$Effort[,"AreaSurveyed"],Mapping=Sim.data$Effort[,c("Cell","Time")],DayHour=DayHour,Thin=Thin,Prop.photo=rep(0.5,n.transects),Hab.cov=Hab.cov,Obs.cov=NULL,Hab.formula=hab.formula,Cov.prior.pdf=Cov.prior.pdf,Cov.prior.parms=Cov.prior.parms,Cov.prior.fixed=Cov.prior.fixed,Cov.prior.n=Cov.prior.n,n.species=n.species,n.obs.cov=0,spat.ind=spat.ind,Psi=Psi,Inits=NULL,grps=TRUE,Control=Control,Prior.pars=Prior.pars,post.loss=TRUE,True.species=True.sp,Omega.true=Omega.true,Eta.true=Eta.true,DEBUG=TRUE)
+MCMC=hierarchical_boss_st(Dat=Sim.data$Obs,K=Data$K,Area.hab=rep(1,S*t.steps),Area.trans=Sim.data$Effort[,"AreaSurveyed"],Mapping=Sim.data$Effort[,c("Cell","Time")],DayHour=DayHour,Thin=Thin,Prop.photo=rep(0.5,n.transects),Hab.cov=Hab.cov,Obs.cov=NULL,Hab.formula=hab.formula,Cov.prior.pdf=Cov.prior.pdf,Cov.prior.parms=Cov.prior.parms,Cov.prior.fixed=Cov.prior.fixed,Cov.prior.n=Cov.prior.n,n.species=n.species,n.obs.cov=0,spat.ind=spat.ind,Psi=Psi,Inits=NULL,grps=TRUE,Control=Control,Prior.pars=Prior.pars,post.loss=TRUE,True.species=True.sp,Omega.true=Omega.true,Eta.true=Eta.true,Alpha.true=Alpha.true,DEBUG=TRUE)
     
 
 #Obs.data
@@ -130,8 +133,12 @@ lines(N.true)
 #plot(apply(MCMC$MCMC$Pred,3,'sum')/30)
 
 #plot_N_map(1,as.matrix(Sim.data$Data$Grid[[5]]@data[,1],ncol=1),Grid=Data$Grid,leg.title="Covariate")
-#plot_N_map(1,Sim.data$N,Grid=Data$Grid,leg.title="True Abundance")
-#plot_N_map(1,apply(MCMC$MCMC$Pred,c(1,2),'mean'),Grid=Data$Grid,leg.title="Abundance")
+Cur.G=matrix(Sim.data$G.true[isp,,],S,t.steps)
+Cur.G2=matrix(apply(MCMC$Post$G[isp,,],2,'median'),S,t.steps)
+for(i in 1:t.steps){
+  plot_N_map(i,Cur.G,Grid=Data$Grid)
+  plot_N_map(i,Cur.G2,Grid=Data$Grid)
+}
 #plot_N_map(15,Sim.data$N,Grid=Data$Grid,leg.title="True Abundance")
 #plot_N_map(15,apply(MCMC$MCMC$Pred,c(1,2),'mean'),Grid=Data$Grid,leg.title="Abundance")
 #plot_N_map(20,Sim.data$N,Grid=Data$Grid,leg.title="True Abundance")

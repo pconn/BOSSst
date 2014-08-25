@@ -77,7 +77,7 @@
 #' @keywords areal model, data augmentation, distance sampling, mcmc, reversible jump
 #' @author Paul B. Conn \email{paul.conn@@noaa.gov} 
 #' @examples print("example analysis included in the script run_BOSS_sims.R")
-hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,Prop.photo=Prop.photo,Hab.cov,Obs.cov,Hab.formula,Cov.prior.pdf,Cov.prior.parms,Cov.prior.fixed,Cov.prior.n,n.species=1,n.obs.cov=0,spat.ind=FALSE,srr.tol=0.5,Psi,Inits=NULL,grps=FALSE,Control,adapt=TRUE,Prior.pars,post.loss=TRUE,True.species=NULL,Omega.true=NULL,Eta.true=NULL,DEBUG=FALSE){
+hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,Prop.photo=Prop.photo,Hab.cov,Obs.cov,Hab.formula,Cov.prior.pdf,Cov.prior.parms,Cov.prior.fixed,Cov.prior.n,n.species=1,n.obs.cov=0,spat.ind=FALSE,srr.tol=0.5,Psi,Inits=NULL,grps=FALSE,Control,adapt=TRUE,Prior.pars,post.loss=TRUE,True.species=NULL,Alpha.true=NULL,Omega.true=NULL,Eta.true=NULL,DEBUG=FALSE){
   require(mvtnorm)
 	require(Matrix)
 	require(truncnorm)
@@ -264,7 +264,7 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
 		#cat('\n Beginning adapt phase \n')
 		#Out=mcmc_boss_st(Par=Par,Dat=Dat,Psi=Psi,cur.iter=Control$adapt,adapt=1,Control=Control,DM.hab=DM.hab,Prior.pars=Prior.pars,Meta=Meta,Omega.true=Omega.true,Eta.true=Eta.true)
 		cat('\n Beginning MCMC phase \n')
-		Out=mcmc_boss_st(Par=Par,Dat=Dat,Psi=Psi,cur.iter=Control$iter,adapt=Control$adapt,Control=Control,DM.hab=DM.hab,Prior.pars=Prior.pars,Meta=Meta,Omega.true=Omega.true,Eta.true=Eta.true)
+		Out=mcmc_boss_st(Par=Par,Dat=Dat,Psi=Psi,cur.iter=Control$iter,adapt=Control$adapt,Control=Control,DM.hab=DM.hab,Prior.pars=Prior.pars,Meta=Meta,Omega.true=Omega.true,Eta.true=Eta.true,Alpha.true=Alpha.true)
 #	}
 #	else{
 #		cat('\n Beginning MCMC phase \n')

@@ -325,8 +325,8 @@ plot_N_map<-function(cur.t,N,Grid,highlight=NULL){
   new.colnames=colnames(Cur.df)
   new.colnames[1:2]=c("Easting","Northing")
   colnames(Cur.df)=new.colnames
-  p1=ggplot(Cur.df)+aes(Easting,Northing,fill=Abundance)+geom_raster()+tmp.theme
   tmp.theme=theme(axis.ticks = element_blank(), axis.text = element_blank())
+  p1=ggplot(Cur.df)+aes(Easting,Northing,fill=Abundance)+geom_raster()+tmp.theme
   if(is.null(highlight)==FALSE){
     #p1=p1+geom_rect(data=midpoints,size=0.5,fill=NA,colour="yellow",aes(xmin=Easting-25067,xmax=Easting,ymin=Northing,ymax=Northing+25067))
     p1=p1+geom_rect(data=midpoints,size=0.5,fill=NA,colour="yellow",aes(xmin=Easting-25067/2,xmax=Easting+25067/2,ymin=Northing-25067/2,ymax=Northing+25067/2))
