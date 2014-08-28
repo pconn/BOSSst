@@ -208,7 +208,7 @@ sim_CPIF_misID2<-function(S,n.species,Data,Sim.pars,hab.formula,Q.knot,K.cpif,Ar
   }
   #simulate observed counts
   
-  Obs=matrix(0,10000,4)
+  Obs=matrix(0,500000,4)
   colnames(Obs)=c("Transect","Photo","Obs","Group")
   N.true=array(0,dim=c(n.species,S,t.steps))
   True.sp=0

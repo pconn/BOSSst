@@ -273,7 +273,9 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
     for(it in 1:t.steps){
       if(Nt.obs[it]>0){
         Omega.list[[isp]][[it]]=Par$Omega[isp,Sampled[which(Meta$CellTime[,"Time"]==it)]] #define only for observed
-        Pi.list[[isp]][[it]]=Pi.obs.stnd[[isp]][Time.indices[it,1]:Time.indices[it,2],it]       
+        Pi.list[[isp]][[it]]=Pi.obs.stnd[[isp]][Time.indices[it,1]:Time.indices[it,2],it] 
+        Pi.list[[isp]][[it]]=Pi.list[[isp]][[it]]*Cur.thin[Time.indices[it,1]:Time.indices[it,2]]
+        Pi.list[[isp]][[it]]=Pi.list[[isp]][[it]]/sum(Pi.list[[isp]][[it]])
       }
     }
   }  
@@ -296,7 +298,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
   Dat2[,"Species"]=factor(Dat2[,"Species"],levels=c(1:Meta$n.species)) 
   	
 	PROFILE=FALSE  #outputs time associated with updating different groups of parameters
-	DEBUG=FALSE
+	DEBUG=TRUE
 	if(DEBUG){
     #Par$Eta=0*Par$Eta
     #set initial values as in "spatpred" GLMM for comparison
@@ -316,10 +318,10 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 	##################################################
 	for(iiter in 1:cur.iter){
 		cat(paste('\n ', iiter))
-		if(DEBUG){
-		  Par$hab[,1]=c(10,1,7,4)
-		  Par$hab[,2]=c(-10,2,-4,-5)
-		}
+		#if(DEBUG){
+		#  Par$hab[,1]=c(10,1,7,4)
+		#  Par$hab[,2]=c(-10,2,-4,-5)
+		#}
 		for(isp in 1:Meta$n.species){		
 		  #update total abundance
 		  log.G.prop=log.G[isp]+rnorm(1,0,Control$MH.N[isp])
@@ -348,6 +350,8 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
  			#update omega (sampled cells)
 			Omega.pred=DM.hab.sampled[[isp]]%*%Par$hab[isp,]+Par$Eta[isp,Sampled]+Log.area.adjust[Sampled]
 			sd=sqrt(1/Par$tau.eps[isp])
+			#simulate omega for unobserved times and places
+			Par$Omega[isp,-Sampled]=rnorm(n.ST-n.unique,DM.hab.unsampled[[isp]]%*%Par$hab[isp,]+Par$Eta[isp,-Sampled]+Log.area.adjust[-Sampled],sd)
 			if(is.null(Omega.true)){
 			  for(it in 1:t.steps){
 			    #if(iiter==56 & isp==2 & it==12){
@@ -357,29 +361,51 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
             crap=1
 			    }
 			    if(Nt.obs[it]>0){
-			      Dt.old=0.5*Control$MH.omega[isp,it]^2*d_logP_omega(Omega=Omega.list[[isp]][[it]],Count=Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]],Mu=Omega.pred[Time.indices[it,1]:Time.indices[it,2]],tau=Par$tau.eps[isp],G.sum=sum(Par$G[isp,Sampled[Time.indices[it,1]:Time.indices[it,2]]]),Cur.thin=Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
-			      Prop=Omega.list[[isp]][[it]]+Dt.old+rnorm(Nt.obs[it],0,Control$MH.omega[isp,it])
-			      Prop.exp=exp(Prop)
-			      Pi.prop=Prop.exp/sum(Prop.exp)
-				    post.new=sum(dnorm(Prop,Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.prop)+log(Cur.thin[Time.indices[it,1]:Time.indices[it,2]])))
-			      post.old=sum(dnorm(Omega.list[[isp]][[it]],Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.list[[isp]][[it]])+log(Cur.thin[Time.indices[it,1]:Time.indices[it,2]])))
-            Temp=Prop-Omega.list[[isp]][[it]]-Dt.old
-			      jump.old.to.new=-0.5/Control$MH.omega[isp,it]^2*Temp%*%Temp
-			      Dstar=0.5*Control$MH.omega[isp,it]^2*d_logP_omega(Omega=Prop,Count=Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]],Mu=Omega.pred[Time.indices[it,1]:Time.indices[it,2]],tau=Par$tau.eps[isp],G.sum=sum(Par$G[isp,Sampled[Time.indices[it,1]:Time.indices[it,2]]]),Cur.thin=Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
-            Temp=Omega.list[[isp]][[it]]-Prop-Dstar
-			      jump.new.to.old=-0.5/Control$MH.omega[isp,it]^2*Temp%*%Temp
-			      if(runif(1)<exp(post.new-post.old+jump.new.to.old-jump.old.to.new)){
-			        Omega.list[[isp]][[it]]=Prop
-			        Pi.list[[isp]][[it]]=Pi.prop
-			        Accept$Omega[isp,it]=Accept$Omega[isp,it]+1
-			      }  
+# 			      Dt.old=0.5*Control$MH.omega[isp,it]^2*d_logP_omega(Omega=Omega.list[[isp]][[it]],Count=Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]],Mu=Omega.pred[Time.indices[it,1]:Time.indices[it,2]],tau=Par$tau.eps[isp],G.sum=sum(Par$G[isp,Sampled[Time.indices[it,1]:Time.indices[it,2]]]),Cur.thin=Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
+#             #Dt.old=0
+#             Prop=Omega.list[[isp]][[it]]+Dt.old+rnorm(Nt.obs[it],0,Control$MH.omega[isp,it])
+# 			      Prop.exp=exp(Prop)
+# 			      Pi.prop=Prop.exp/sum(Prop.exp)
+#             Cur.sum=sum(Pi.prop*Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
+# 			      post.new=sum(dnorm(Prop,Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.prop)))-sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]])*log(Cur.sum)
+# 			      Cur.sum=sum(Pi.list[[isp]][[it]]*Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
+#             post.old=sum(dnorm(Omega.list[[isp]][[it]],Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.list[[isp]][[it]])))-sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]])*log(Cur.sum)
+# 				    #post.new=sum(dnorm(Prop,Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.prop)+log(Cur.thin[Time.indices[it,1]:Time.indices[it,2]])))
+# 			      #post.old=sum(dnorm(Omega.list[[isp]][[it]],Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.list[[isp]][[it]])+log(Cur.thin[Time.indices[it,1]:Time.indices[it,2]])))
+#             Temp=Prop-Omega.list[[isp]][[it]]-Dt.old
+# 			      jump.old.to.new=-0.5/Control$MH.omega[isp,it]^2*Temp%*%Temp
+# 			      Dstar=0.5*Control$MH.omega[isp,it]^2*d_logP_omega(Omega=Prop,Count=Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]],Mu=Omega.pred[Time.indices[it,1]:Time.indices[it,2]],tau=Par$tau.eps[isp],G.sum=sum(Par$G[isp,Sampled[Time.indices[it,1]:Time.indices[it,2]]]),Cur.thin=Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
+#             Temp=Omega.list[[isp]][[it]]-Prop-Dstar
+# 			      jump.new.to.old=-0.5/Control$MH.omega[isp,it]^2*Temp%*%Temp
+#             #jump.new.to.old=0
+#             #jump.old.to.new=0
+# 			      if(runif(1)<exp(post.new-post.old+jump.new.to.old-jump.old.to.new)){
+# 			        Omega.list[[isp]][[it]]=Prop
+# 			        Pi.list[[isp]][[it]]=Pi.prop
+# 			        Accept$Omega[isp,it]=Accept$Omega[isp,it]+1
+# 			      }  
+            
+            #hit and run algorithm
+            D=rnorm(Nt.obs[it])
+            D=D/sqrt(sum(D^2))
+            Prop=Omega.list[[isp]][[it]]+D*runif(1,-Control$MH.omega[isp,it],Control$MH.omega[isp,it])
+				    Prop.exp=exp(Prop)
+				    Pi.prop=Prop.exp/sum(Prop.exp)
+				    Cur.sum=sum(Pi.prop*Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
+				    post.new=sum(dnorm(Prop,Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.prop)))-sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]])*log(Cur.sum)
+				    Cur.sum=sum(Pi.list[[isp]][[it]]*Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
+				    post.old=sum(dnorm(Omega.list[[isp]][[it]],Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.list[[isp]][[it]])))-sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]])*log(Cur.sum)
+				    if(runif(1)<exp(post.new-post.old)){
+				      Omega.list[[isp]][[it]]=Prop
+				      Pi.list[[isp]][[it]]=Pi.prop
+				      Accept$Omega[isp,it]=Accept$Omega[isp,it]+1
+				    }  
+				    
 			    }
 			  }
        
 			  Par$Omega[isp,Sampled]=unlist(Omega.list[[isp]])
 			  #Omega[Which.obs]=stack_list_vector(Omega.list) #convert back to vector format
-			  #simulate omega for unobserved times and places
-			  Par$Omega[isp,-Sampled]=rnorm(n.ST-n.unique,DM.hab.unsampled[[isp]]%*%Par$hab[isp,]+Par$Eta[isp,-Sampled]+Log.area.adjust[-Sampled],sd)
 			  #compute Pi.obs (need for abundance updates)
 			  Omega.exp[isp,]=exp(Par$Omega[isp,])
 			  D=Diagonal(x=Omega.exp[isp,])
@@ -412,7 +438,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 			  Diff=Par$Omega[isp,Sampled]-Omega.pred
 			  Par$tau.eps[isp] <- rgamma(1,n.unique/2 + Prior.pars$a.eps, as.numeric(crossprod(Diff,Diff))*0.5 + Prior.pars$b.eps)
 			}
-      if(DEBUG)Par$tau.eps[isp]=100
+      #if(DEBUG)Par$tau.eps[isp]=100
         
 			if(PROFILE==TRUE){
 			  cat(paste("Tau epsilon: ", (Sys.time()-st),'\n'))
@@ -427,7 +453,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 			  cat(paste("fixed effects: ", (Sys.time()-st),'\n'))
 			  st=Sys.time()
 			}
-			if(iiter==15000){
+			if(iiter==55000){
 			  crap=1
 			}
 			#update kernel weights/REs for space-time model
@@ -480,7 +506,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 		    }	
 		  }
 		  
-		  
+    if(DEBUG==FALSE){
 		  ##### update true species for observed animals ######
 		  if(Control$species.optim==FALSE){
 		    Which.sampled=sample(n.photo,n.misID.updates) #replace needs to be false here or there's issues with using Old.sp
@@ -625,8 +651,10 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
       }
     }
     log.Mtp1=log(apply(Ct,1,'max')) #lower bound on log(abundance)
-	
-		if(PROFILE==TRUE){
+
+  }  ##end DEBUG
+
+    if(PROFILE==TRUE){
 			cat(paste("Ind cov pars: ", (Sys.time()-st),'\n'))
 			st=Sys.time()
 		}
@@ -639,8 +667,8 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
           if((Accept$G[ipar]-Old.accept.G[ipar])<3)Control$MH.N[ipar]=Control$MH.N[ipar]*0.95
           if((Accept$G[ipar]-Old.accept.G[ipar])>4)Control$MH.N[ipar]=Control$MH.N[ipar]*1.053
 					for(i in 1:Meta$t.steps){
-					  if((Accept$Omega[ipar,i]-Old.accept.omega[ipar,i])<3)Control$MH.omega[ipar,i]=Control$MH.omega[ipar,i]*.95
-					  if((Accept$Omega[ipar,i]-Old.accept.omega[ipar,i])>4)Control$MH.omega[ipar,i]=Control$MH.omega[ipar,i]*1.053
+					  if((Accept$Omega[ipar,i]-Old.accept.omega[ipar,i])<2)Control$MH.omega[ipar,i]=Control$MH.omega[ipar,i]*.95
+					  if((Accept$Omega[ipar,i]-Old.accept.omega[ipar,i])>3)Control$MH.omega[ipar,i]=Control$MH.omega[ipar,i]*1.053
 				  }          
 				}
 				Old.accept.omega=Accept$Omega

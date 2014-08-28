@@ -347,9 +347,11 @@ plot_N_map<-function(cur.t,N,Grid,highlight=NULL){
 #' @keywords logit, expit
 #' @author Paul Conn \email{paul.conn@@noaa.gov}
 d_logP_omega<-function(Omega,Counts,Mu,tau,G.sum,Cur.thin){
-  cur.sum=sum(exp(Omega))
-  cur.sum2=cur.sum-exp(Omega)
-  return(Counts - (Omega-Mu)*tau - exp(Omega)/cur.sum + (G.sum-sum(Counts))*Cur.thin*cur.sum2*exp(Omega)/(cur.sum*((Cur.thin-1)*exp(Omega)-cur.sum2)))
+  Omega.exp=exp(Omega)
+  cur.sum=sum(Omega.exp)
+  #cur.sum2=cur.sum-exp(Omega)
+  #return(Counts - (Omega-Mu)*tau - exp(Omega)/cur.sum + (G.sum-sum(Counts))*Cur.thin*cur.sum2*exp(Omega)/(cur.sum*((Cur.thin-1)*exp(Omega)-cur.sum2)))
+  return(Counts+(Mu-Omega)*tau-Counts*Omega.exp/cur.sum)
 } 
 
 #' function to sample species using apply

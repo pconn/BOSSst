@@ -9,14 +9,14 @@ Delta=c(-0.01)
 S=400
 t.steps=20
 N.transects=c(2)
-line.width=0.05
+line.width=1
 n.species=4
 GENERATE=TRUE
 if(GENERATE==TRUE){
   for(igen in 1:1){  #loop over generating model to generate data sets
     for(itrans in 1:1){ #loop over number of transects in each cell
       for(isim in 1:n.sims){
-        Sim.data=sim_data_generic2(n.species=4,S=S,t.steps=t.steps,n.transects=N.transects[itrans],line.width=line.width,buffer=0,delta=Delta[isim])
+        Sim.data=sim_data_generic2(n.species=n.species,S=S,t.steps=t.steps,n.transects=N.transects[itrans],line.width=line.width,buffer=0,delta=Delta[isim])
         #fname=paste("simdata_gen",Model.list[igen],"_trans",N.transects[itrans],"_sim",isim,sep='')
         #save(Sim.data,file=paste("./sim_generic_data/",fname,sep=''))
       }
@@ -90,7 +90,7 @@ Prior.pars=list(beta.tau=0.0001,
                 beta0.tau.rw2=1,
                 beta1.tau.rw2=10)
 
-Control=list(iter=15000,burnin=3000,thin=10,n.adapt=3000,predict=TRUE,MH.N=rep(0.2,n.species),MH.omega=matrix(0.01,n.species,t.steps),adapt=TRUE,fix.tau.epsilon=FALSE,species.optim=TRUE)        
+Control=list(iter=55000,burnin=5000,thin=10,n.adapt=4000,predict=TRUE,MH.N=rep(0.2,n.species),MH.omega=matrix(0.01,n.species,t.steps),adapt=TRUE,fix.tau.epsilon=FALSE,species.optim=TRUE)        
 
 Dat=Sim.data$Obs
 Area.hab=rep(1,S*t.steps)
