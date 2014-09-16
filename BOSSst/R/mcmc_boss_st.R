@@ -24,7 +24,6 @@
 #'  "adapt" if true, adapts MH proposals
 #'  "n.adapt" If adapt==TRUE, number of iterations to apply adapt algorithm (note: burnin shous be > n.adapt)
 #'	"thin": if specified, how many iterations to skip between recorded posterior samples;
-#'  "MH.omega" A matrix providing standard deviations for Langevin-Hastings proposals (rows: species, columns: time steps)
 #'  "MH.G" A vector giving standard deviation for group abundance MH updates
 #'  "species.optim": if TRUE, species updates are optimized for discrete covariates 
 #'  "fix.tau.epsilon": if TRUE, fix tau_epsilon to 100
@@ -42,6 +41,7 @@
 #' 	"n.transects"	Number of transects
 #'  "n.species"     Number of species
 #' 	"S"				Number of strata cells
+#'  "K"  Spatial weights matrix for process convolution (spatial only at this stage; dimension S x #knots)
 #'  "spat.ind"		Indicator for spatial dependence
 #'  "Area.hab"		Vector giving relative area covered by each strata
 #'  "Area.trans"	Vector giving fraction of area of relevant strata covered by each transect
@@ -96,13 +96,14 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 	n.obs.cov=ncol(Dat)-Meta$n.ind.cov-4
  	n.obs.types=dim(Psi)[2]
  	
+  n.knots=ncol(Meta$K)
   Q1=linear_adj_RW2(Meta$t.steps) #precision matrix
   Q=Q1
   for(i in 2:n.knots)Q=bdiag(Q,Q1)  #precision matrix a block diagonal matrix
   Q.t=t(Q)  
   
   #sort count data by time and cell so that some of the list to vector code will work right
-  Order=order(Meta$CellTime$Time[Dat[,"Transect"]],Meta$CellTime$Cell[Dat[,"Transect"]])
+  Order=order(Meta$CellTime[,2][Dat[,"Transect"]],Meta$CellTime[,1][Dat[,"Transect"]])
   Dat=Dat[Order,]
   row.names(Dat)=c(1:nrow(Dat))
   
@@ -110,17 +111,19 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
   n.unique=length(Sampled) 
 
   #declare index, function for accessing thinning probabilities for specific transects
-  Thin.pl=Meta$DayHour[,"day"]*(Meta$DayHour[,"hour"]-1)+Meta$DayHour[,"day"]
+  Thin.pl=Meta$t.steps*(Meta$DayHour[,2]-1)+Meta$DayHour[,1]
  	get_thin<-function(Thin,Thin.pl,sp,iter){
  	  Tmp.thin=Thin[sp,,,iter][Thin.pl]
  	  Tmp.thin
  	} 
+  Thin.vec=rep(0,n.ST)  #needed in G, N updates
     
   if(is.null(Omega.true)==FALSE){
     for(isp in 1:Meta$n.species){
       Par$Omega[isp,]=as.numeric(Omega.true[isp,,])
     }
   }
+  if(is.null(Omega.true)==TRUE)Par$Omega=Par$Omega+rnorm(length(Par$Omega),0,0.2)  #get rid of redundant values for pos-def sample covariance
   
 	#initialize pi
   Log.area.adjust=log(Meta$Area.hab)
@@ -216,20 +219,20 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
   if(Control$species.optim==TRUE)Species.cell.probs=matrix(0,n.misID.updates,n.species)
    
   #setup process conv/RW2 space-time model
+  n.knots=ncol(Meta$K)
   K=matrix(0,S*t.steps,n.knots*t.steps)
-  #for(i in 2:t.steps)K=bdiag(K,Data$K) 
   #rearrage K to grab right elements of alpha
   cur.row=0
   for(it in 1:t.steps){
     for(iknot in 1:n.knots){
-      K[(cur.row+1):(cur.row+S),(iknot-1)*t.steps+it]=Data$K[,iknot]
+      K[(cur.row+1):(cur.row+S),(iknot-1)*t.steps+it]=Meta$K[,iknot]
     }
     cur.row=cur.row+S
   }
   K=Matrix(K)
   Alpha=matrix(0,n.species,nrow(Q))
   for(isp in 1:Meta$n.species){
-    Alpha[isp,]=rrw(Par$tau.eta*Q) #initial values for space-time random effects
+    Alpha[isp,]=rrw(Par$tau.eta[isp]*Q) #initial values for space-time random effects
     if(is.null(Alpha.true)==FALSE)Alpha[isp,]=as.numeric(t(Alpha.true[isp,,]))
   }
   #Eta=K%*%Alpha
@@ -255,32 +258,38 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
   Beta.rw2=matrix(0,Meta$n.species,ncol(X.rw2))
 
   #summary statistics to quantify number of counts made in each time step
+  Control$MH.omega=matrix(0,Meta$n.species,t.steps)
   Nt.obs=rep(0,t.steps)
   Time.indices=matrix(0,t.steps,2) #beginning and ending entries of cells visited for each time step
   cur.pl=1
   for(it in 1:t.steps){
-    Nt.obs[it]=sum(Meta$CellTime[,"Time"]==it)
+    Nt.obs[it]=sum(Meta$CellTime[,2]==it)
     Time.indices[it,1]=cur.pl
     Time.indices[it,2]=(cur.pl+Nt.obs[it]-1)
     cur.pl=cur.pl+Nt.obs[it]
+    Control$MH.omega[,it]=2.4^2/Nt.obs[it]
   }
   
   #make lists of certain parameters by species, year
-  Omega.list=Pi.list=vector("list",4)
+  Omega.list=Omega.current=Prop.Sigma=Pi.list=vector("list",Meta$n.species)
   for(isp in 1:Meta$n.species){
     Omega.pred=DM.hab.sampled[[isp]]%*%Par$hab[isp,]+Par$Eta[isp,Sampled]+Log.area.adjust[Sampled]
     Cur.thin=get_thin(Meta$Thin,Thin.pl,isp,thin.pl)*Area.trans
     for(it in 1:t.steps){
       if(Nt.obs[it]>0){
-        Omega.list[[isp]][[it]]=Par$Omega[isp,Sampled[which(Meta$CellTime[,"Time"]==it)]] #define only for observed
+        Omega.list[[isp]][[it]]=Par$Omega[isp,Sampled[which(Meta$CellTime[,2]==it)]] #define only for observed
         Pi.list[[isp]][[it]]=Pi.obs.stnd[[isp]][Time.indices[it,1]:Time.indices[it,2],it] 
         Pi.list[[isp]][[it]]=Pi.list[[isp]][[it]]*Cur.thin[Time.indices[it,1]:Time.indices[it,2]]
         Pi.list[[isp]][[it]]=Pi.list[[isp]][[it]]/sum(Pi.list[[isp]][[it]])
+        Prop.Sigma[[isp]][[it]]=diag(Nt.obs[it])  #holds covariance matrix for MH proposals
+        Omega.current[[isp]][[it]]=matrix(0,Nt.obs[it],100)
+        Omega.current[[isp]][[it]][,1]=as.vector(Omega.list[[isp]][[it]])
       }
     }
   }  
   Omega.exp=exp(Par$Omega)
   
+
 	if(Meta$post.loss){ #calculate observed counts of different detection types, initialize prediction arrays
     Obs.det=matrix(0,Meta$n.transects,n.obs.types+1) #col=n.obs.types+1 is for hotspots w/o accompanying photographs
     Pred.det=array(0,dim=c(mcmc.length,Meta$n.transects,n.obs.types+1))
@@ -298,7 +307,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
   Dat2[,"Species"]=factor(Dat2[,"Species"],levels=c(1:Meta$n.species)) 
   	
 	PROFILE=FALSE  #outputs time associated with updating different groups of parameters
-	DEBUG=TRUE
+	DEBUG=FALSE
 	if(DEBUG){
     #Par$Eta=0*Par$Eta
     #set initial values as in "spatpred" GLMM for comparison
@@ -317,8 +326,8 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 	############   Begin MCMC Algorithm ##############
 	##################################################
 	for(iiter in 1:cur.iter){
-		cat(paste('\n ', iiter))
-		#if(DEBUG){
+	  #if((iiter%%1000)==1)cat(paste("iteration ",iiter," of ",cur.iter,"\n"))
+	  #if(DEBUG){
 		#  Par$hab[,1]=c(10,1,7,4)
 		#  Par$hab[,2]=c(-10,2,-4,-5)
 		#}
@@ -346,6 +355,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 		    cat(paste("G: ", (Sys.time()-st),'\n'))
 		    st=Sys.time()
 		  } 
+
       
  			#update omega (sampled cells)
 			Omega.pred=DM.hab.sampled[[isp]]%*%Par$hab[isp,]+Par$Eta[isp,Sampled]+Log.area.adjust[Sampled]
@@ -354,53 +364,19 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 			Par$Omega[isp,-Sampled]=rnorm(n.ST-n.unique,DM.hab.unsampled[[isp]]%*%Par$hab[isp,]+Par$Eta[isp,-Sampled]+Log.area.adjust[-Sampled],sd)
 			if(is.null(Omega.true)){
 			  for(it in 1:t.steps){
-			    #if(iiter==56 & isp==2 & it==12){
-			    #  print(paste("time ",it,"\n"))
-			    #}
-			    if(iiter==5000){
-            crap=1
-			    }
 			    if(Nt.obs[it]>0){
-# 			      Dt.old=0.5*Control$MH.omega[isp,it]^2*d_logP_omega(Omega=Omega.list[[isp]][[it]],Count=Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]],Mu=Omega.pred[Time.indices[it,1]:Time.indices[it,2]],tau=Par$tau.eps[isp],G.sum=sum(Par$G[isp,Sampled[Time.indices[it,1]:Time.indices[it,2]]]),Cur.thin=Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
-#             #Dt.old=0
-#             Prop=Omega.list[[isp]][[it]]+Dt.old+rnorm(Nt.obs[it],0,Control$MH.omega[isp,it])
-# 			      Prop.exp=exp(Prop)
-# 			      Pi.prop=Prop.exp/sum(Prop.exp)
-#             Cur.sum=sum(Pi.prop*Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
-# 			      post.new=sum(dnorm(Prop,Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.prop)))-sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]])*log(Cur.sum)
-# 			      Cur.sum=sum(Pi.list[[isp]][[it]]*Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
-#             post.old=sum(dnorm(Omega.list[[isp]][[it]],Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.list[[isp]][[it]])))-sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]])*log(Cur.sum)
-# 				    #post.new=sum(dnorm(Prop,Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.prop)+log(Cur.thin[Time.indices[it,1]:Time.indices[it,2]])))
-# 			      #post.old=sum(dnorm(Omega.list[[isp]][[it]],Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.list[[isp]][[it]])+log(Cur.thin[Time.indices[it,1]:Time.indices[it,2]])))
-#             Temp=Prop-Omega.list[[isp]][[it]]-Dt.old
-# 			      jump.old.to.new=-0.5/Control$MH.omega[isp,it]^2*Temp%*%Temp
-# 			      Dstar=0.5*Control$MH.omega[isp,it]^2*d_logP_omega(Omega=Prop,Count=Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]],Mu=Omega.pred[Time.indices[it,1]:Time.indices[it,2]],tau=Par$tau.eps[isp],G.sum=sum(Par$G[isp,Sampled[Time.indices[it,1]:Time.indices[it,2]]]),Cur.thin=Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
-#             Temp=Omega.list[[isp]][[it]]-Prop-Dstar
-# 			      jump.new.to.old=-0.5/Control$MH.omega[isp,it]^2*Temp%*%Temp
-#             #jump.new.to.old=0
-#             #jump.old.to.new=0
-# 			      if(runif(1)<exp(post.new-post.old+jump.new.to.old-jump.old.to.new)){
-# 			        Omega.list[[isp]][[it]]=Prop
-# 			        Pi.list[[isp]][[it]]=Pi.prop
-# 			        Accept$Omega[isp,it]=Accept$Omega[isp,it]+1
-# 			      }  
-            
-            #hit and run algorithm
-            D=rnorm(Nt.obs[it])
-            D=D/sqrt(sum(D^2))
-            Prop=Omega.list[[isp]][[it]]+D*runif(1,-Control$MH.omega[isp,it],Control$MH.omega[isp,it])
-				    Prop.exp=exp(Prop)
-				    Pi.prop=Prop.exp/sum(Prop.exp)
-				    Cur.sum=sum(Pi.prop*Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
-				    post.new=sum(dnorm(Prop,Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.prop)))-sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]])*log(Cur.sum)
-				    Cur.sum=sum(Pi.list[[isp]][[it]]*Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
-				    post.old=sum(dnorm(Omega.list[[isp]][[it]],Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.list[[isp]][[it]])))-sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]])*log(Cur.sum)
-				    if(runif(1)<exp(post.new-post.old)){
-				      Omega.list[[isp]][[it]]=Prop
-				      Pi.list[[isp]][[it]]=Pi.prop
-				      Accept$Omega[isp,it]=Accept$Omega[isp,it]+1
-				    }  
-				    
+            Prop=rmvnorm(1,Omega.list[[isp]][[it]],Control$MH.omega[isp,it]*Prop.Sigma[[isp]][[it]])
+			      Prop.exp=exp(Prop)
+			      Pi.prop=Prop.exp/sum(Prop.exp)
+            Cur.sum=sum(Pi.prop*Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
+			      post.new=sum(dnorm(Prop,Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.prop)))-sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]])*log(Cur.sum)
+			      Cur.sum=sum(Pi.list[[isp]][[it]]*Cur.thin[Time.indices[it,1]:Time.indices[it,2]])
+            post.old=sum(dnorm(Omega.list[[isp]][[it]],Omega.pred[Time.indices[it,1]:Time.indices[it,2]],sd,log=TRUE))+sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*(log(Pi.list[[isp]][[it]])))-sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]])*log(Cur.sum)
+			      if(runif(1)<exp(post.new-post.old)){
+			        Omega.list[[isp]][[it]]=Prop
+			        Pi.list[[isp]][[it]]=Pi.prop
+			        Accept$Omega[isp,it]=Accept$Omega[isp,it]+1
+			      }  
 			    }
 			  }
        
@@ -424,9 +400,12 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
         Pi.obs[[isp]]=Pi.mat[[isp]][Sampled,] 
         Pi.obs.stnd[[isp]]=Pi.obs[[isp]]%*%Diagonal(x=1/colSums(Pi.obs[[isp]]))   
         Pi.obs.stnd.mat[isp,]=rowSums(Pi.obs.stnd[[isp]])  #needed for species updates
-			}			  
-
-			
+			}	
+      cur.j=iiter%%100
+      if(cur.j==0)cur.j=100
+      for(it in 1:t.steps){
+        if(Nt.obs[it]>0)Omega.current[[isp]][[it]][,cur.j]=as.vector(Omega.list[[isp]][[it]])
+      }
       
 		  if(PROFILE==TRUE){
 		    cat(paste("Omega: ", (Sys.time()-st),'\n'))
@@ -453,7 +432,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 			  cat(paste("fixed effects: ", (Sys.time()-st),'\n'))
 			  st=Sys.time()
 			}
-			if(iiter==55000){
+			if(iiter==125000){
 			  crap=1
 			}
 			#update kernel weights/REs for space-time model
@@ -556,17 +535,17 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
     Meta$G.transect=xtabs(~Species+Transect,data=Dat2)  #recalculate number of groups per species/transect combo
     Meta$N.transect=xtabs(Group~Species+Transect,data=Dat2)
 
+    
     for(isp in 1:Meta$n.species){
       ########## update group abundance at strata level using most recent updates to covered area abundance
       Par$G[isp,]=0
-      Cur.thin=rep(0,n.ST)
-      Cur.thin[Sampled]=get_thin(Meta$Thin,Thin.pl,isp,thin.pl)
+      Thin.vec[Sampled]=get_thin(Meta$Thin,Thin.pl,isp,thin.pl)
       for(it in 1:Meta$t.steps){
         G.rem=Par$G.tot[isp]-sum(Meta$G.transect[isp,Meta$CellTime[,2]==it])  
         if(G.rem<0){
           cat("Error: unobserved group size < G.total group size \n")
         }
-        if(G.rem>0)Par$G[isp,]=Par$G[isp,]+rmultinom(1,G.rem,(1-Meta$Covered.area*Cur.thin)*Pi.mat[[1]][,it])  #unsurveyed or surveyed but not available
+        if(G.rem>0)Par$G[isp,]=Par$G[isp,]+rmultinom(1,G.rem,(1-Meta$Covered.area*Thin.vec)*Pi.mat[[isp]][,it])  #unsurveyed or surveyed but not available
       }
       Par$G[isp,Sampled]=Par$G[isp,Sampled]+Meta$G.transect[isp,]
       grp.lam[isp]=ifelse(Meta$Cov.prior.pdf[isp,1] %in% c("pois1_ln","poisson_ln"),exp(Par$Cov.par[isp,1,1]+(Par$Cov.par[isp,2,1])^2/2),Par$Cov.par[isp,1,1])
@@ -666,15 +645,34 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 				for(ipar in 1:Meta$n.species){
           if((Accept$G[ipar]-Old.accept.G[ipar])<3)Control$MH.N[ipar]=Control$MH.N[ipar]*0.95
           if((Accept$G[ipar]-Old.accept.G[ipar])>4)Control$MH.N[ipar]=Control$MH.N[ipar]*1.053
-					for(i in 1:Meta$t.steps){
-					  if((Accept$Omega[ipar,i]-Old.accept.omega[ipar,i])<2)Control$MH.omega[ipar,i]=Control$MH.omega[ipar,i]*.95
-					  if((Accept$Omega[ipar,i]-Old.accept.omega[ipar,i])>3)Control$MH.omega[ipar,i]=Control$MH.omega[ipar,i]*1.053
-				  }          
+					#for(i in 1:Meta$t.steps){
+					#  if((Accept$Omega[ipar,i]-Old.accept.omega[ipar,i])<2)Control$MH.omega[ipar,i]=Control$MH.omega[ipar,i]*.95
+					#  if((Accept$Omega[ipar,i]-Old.accept.omega[ipar,i])>3)Control$MH.omega[ipar,i]=Control$MH.omega[ipar,i]*1.053
+				  #}          
 				}
-				Old.accept.omega=Accept$Omega
+				#Old.accept.omega=Accept$Omega
         Old.accept.G=Accept$G
 			}
 		}
+    if(Control$adapt & iiter%%100==0){
+      #adapt Omega proposal covariance matrix using Alg 2 of Shaby and Wells (2010)
+      R=(Accept$Omega-Old.accept.omega)/100
+      for(isp in 1:Meta$n.species){
+        for(it in 1:t.steps){
+          if(Nt.obs[it]>0){
+            #Omega.mean=rowMeans(Omega.current[[isp]][[it]])
+            #Sample.Cov=1/99*crossprod(Omega.current[[isp]][[it]]-Omega.mean)
+            Sample.Cov=cov(t(Omega.current[[isp]][[it]]))
+            gamma.1=(iiter/100-1)^-0.8
+            if(iiter==100)gamma.1=0
+            if(iiter>100)Control$MH.omega[isp,it]=sqrt(Control$MH.omega[isp,it]^2*exp(gamma.1*(R[isp,it]-0.234)))
+            Prop.Sigma[[isp]][[it]]=Prop.Sigma[[isp]][[it]]+gamma.1*(Sample.Cov-Prop.Sigma[[isp]][[it]])
+            if(iiter==200)Prop.Sigma[[isp]][[it]]=Prop.Sigma[[isp]][[it]]+0.1*diag(Nt.obs[it])  #add initial diagonal nugget to make nonsingular
+          }
+        }
+      }
+      Old.accept.omega=Accept$Omega      
+    }
 		
 		
 		#store results if applicable

@@ -1,5 +1,5 @@
 ### format_effort.R
-### function to format effort data for spatio-temporal abundance analysis
+### function to format effort and hotspot/count data for spatio-temporal abundance analysis
 
 
 require(sp)
@@ -14,15 +14,24 @@ date.end=as.Date("2012-05-08")
 t.steps=as.numeric(date.end-date.start)
 
 #load spatio-temporal covariate & grid data
-load("BOSSst_2012data.Rdata")  #boss grid, ice data
 #read in Sp lines DF for transects ("on_effort_tracks.sldf") and Sp points Df for FMC points ("fmclogs.spdf")
-load('c:/users/paul.conn/git/STabundance/BOSS_data_31Jan14.Rdata')  
+load('c:/users/paul.conn/git/STabundance/BOSS_2012Effort_22Apr14.Rdata')  
+load("c:/users/paul.conn/git/STabundance/AlaskaBeringData2012_17April2014.Rdat")  #boss grid, ice data
+#rename IDs for grid cells to be 1:1299 instead of old IDs associated with 'full' Bering grid
+# (needed for some of the intersection stuff below)
+S=nrow(Data$Grid[[1]])
+for(it in 1:t.steps){
+  for(ipoly in 1:S){
+    Data$Grid[[it]]@polygons[[ipoly]]@ID=as.character(ipoly)
+  }
+}
 
 laea_180_proj <- paste("+proj=laea +lat_0=90 +lon_0=180 +x_0=0 +y_0=0",
                        "+datum=WGS84 +units=m +no_defs +ellps=WGS84 +towgs84=0,0,0")
 #reproject onto BOSS Grid
 Tracks=spTransform(on_effort_tracks.sldf, CRS(laea_180_proj))
 Points=spTransform(fmclogs.spdf, CRS(laea_180_proj))
+Hotspots=spTransform(hotspots.spdf,CRS(laea_180_proj))
 
 Tracks$Day=rep(0,nrow(Tracks))
 Flt.ids=unique(Tracks$flightid)
@@ -30,24 +39,43 @@ Flt.ids=unique(Tracks$flightid)
 Flt.table=data.frame(id=Flt.ids,min.time=rep(0,length(Flt.ids)))
 for(irow in 1:nrow(Flt.table))Flt.table[irow,"min.time"]=min(Points[which(Points$flightid==Flt.ids[irow]),]$dt_utc)
 plot(Data$Grid[[1]])
-plot(Tracks[which(Tracks$flightid=="12_OtterFl01"),],add=TRUE,col="blue")
+#plot(Tracks[which(Tracks$flightid=="12_OtterFl01"),],add=TRUE,col="blue")
 
 #limit to 2012
 myfun<-function(x)strsplit(x,'_')[[1]][1]
 Year=sapply(as.character(Flt.table[,"id"]),myfun)
 Yr12.ind=which(Year=="12")
 Flights=Flt.ids[Yr12.ind]
+
+Year=sapply(as.character(Hotspots@data[,"flightid"]),myfun)
+Yr12.ind=which(Year=="12")
+Hotspots=Hotspots[Yr12.ind,]
+
 # limit to 4/10-5/8
 Flights=Flights[-c(30,20,28,29,32,34,36)]
 Tracks=Tracks[which(Tracks$flightid %in% Flights),]
 Points=Points[which(Points$flightid %in% Flights),]
-#decrease to 1 record every 10 seconds for computation of average swath diameter, time of survey
+Hotspots=Hotspots[which(Hotspots@data$flightid %in% Flights),]
+
+# remove hotspots not within a 1000m buffer around each track (these are off effort)
+#this should eventually be changed to be based on times that were on/off effort
+Int=gIntersects(Hotspots,gBuffer(Tracks,width=1000),byid=TRUE)
+Hotspots=Hotspots[-which(Int==0),]
+Int=gIntersects(Hotspots,gBuffer(Data$Grid[[1]],width=1),byid=TRUE)
+Hotspots=Hotspots[-which(Int==0),]  #take out hotspots that don't intersect grid
+
+
+#decrease to 1 record every 4 seconds for computation of average swath diameter, time of survey
 I.point=rep(0,nrow(Points))
-I.point[1:(ceiling(length(I.point)/10))*10-9]=1
+#I.point[1:(ceiling(length(I.point)/10))*10-9]=1
+I.point[1:(ceiling(length(I.point)/4))*4-3]=1
 Points=Points[which(I.point==1),]
 Points=Points[which(Points$effort=="On"),]
 
-S=nrow(Data$Grid[[1]])
+plot(Tracks,add=TRUE,col="blue")
+
+save(Tracks,file="2012_Tracks_for_ST_analysis.Rdata")
+
 
 
 #intersect on effort spatial points with grid
@@ -60,87 +88,114 @@ which.cell=function(x)which(x==1)
 Cell.id=unlist(apply(int,2,which.cell))
 Date=Points$dt_utc
 
-Day=as.numeric(as.Date(Date)-date.start) #make april 21st day 1
+Day=as.numeric(as.Date(Date,tz="PST8PDT")-date.start)+1 #make date.start = day 1
 
 #now get hour in UTC
 Date=format(Date,tz="UTC",usetz=TRUE)
 Hour=round(hour(Date)+minute(Date)/60) #round to nearest hour
+
+#similar intersection, date, time calculations with hotspots
+#int=gIntersects(Hotspots,Study.area,byid=TRUE) #all hotspots intersect study area
+#Hotspots=Hotspots[apply(int,2,'sum')==1,]
+int=gIntersects(Hotspots,Data$Grid[[1]],byid=TRUE)
+which.cell=function(x)which(x==1)
+Cell.id.hs=unlist(apply(int,2,which.cell))
+Date.hs=Hotspots$dt_utc
+
+
+Day.hs=as.numeric(as.Date(Date.hs,tz="PST8PDT")-date.start)+1 #make date.start = day 1
+#pdf("Spotted_seal_count.pdf")
+#hist(Day.hs,breaks=29,main='',xlab="Day",ylab="Spotted seal count")
+#dev.off()
+
+#now get hour in UTC
+Date.hs=format(Date.hs,tz="UTC",usetz=TRUE)
+Hour.hs=round(hour(Date.hs)+minute(Date.hs)/60) #round to nearest hour
+
 
 #calculate swath widths for each on effort point (center, right, left depending on camera)
 myfun<-function(x)strsplit(x,'_')[[1]][2]
 Temp=sapply(as.character(Points$flightid),myfun)
 myfun<-function(x)strsplit(x,'F')[[1]][1]
 Airplane=sapply(Temp,myfun)
+I_Aero=(Airplane=="Aero")
 
 
-STOPPED HERE******** need to post-process points for altitude, roll first 
 fov_horz<-24.9*pi/180
 offset_aero<-12.5*pi/180
 ft_to_meters=0.3048
-diameter[I_Aero==TRUE]=ft_to_meters*effort_data[["gpsalt"]][I_Aero==TRUE]*(tan(offset_aero+fov_horz/2)-tan(offset_aero-fov_horz/2))
-diameter[I_Aero==FALSE]=ft_to_meters*effort_data[["gpsalt"]][I_Aero==FALSE]*2*tan(fov_horz/2)
+diameter=rep(0,length(I_Aero))
+diameter[I_Aero==TRUE]=ft_to_meters*Points[["gpsalt"]][I_Aero==TRUE]*(tan(offset_aero+fov_horz/2)-tan(offset_aero-fov_horz/2))
+diameter[I_Aero==FALSE]=ft_to_meters*Points[["gpsalt"]][I_Aero==FALSE]*2*tan(fov_horz/2)
+Points$diameter=diameter
 
-Swath=effort_data[["diameter"]]
+#now compute area for each unique combination of grid cell and area surveyed
 
-
-
-#determine which locations and days are sampled using seal effort data
-#load('c:/users/paul.conn/git/BOSS/BOSS/data/Transect_Data.Rdat') #read in effort data (held in "flight_segs" SpLinesDF)
-#assemble a list of unique flight names and first/last on effort dates for each
-#flight_segs=on_effort_tracks.sldf
-Flt.ids=unique(flight_segs[["flightid"]])
-Flt.table=data.frame(id=Flt.ids,min.time=rep(0,nrow(Flt.ids))),min.time=rep(flight_segs[["min_dt"]][1],length(Flt.ids)),max.time=rep(flight_segs[["max_dt"]][1],length(Flt.ids)))
-for(i in 1:nrow(Flt.table)){
-  Cur.which=which(flight_segs[["flightid"]]==Flt.table[i,"id"])
-  Flt.table[i,"min.time"]=min(flight_segs[["min_dt"]][Cur.which])
-  Flt.table[i,"max.time"]=max(flight_segs[["max_dt"]][Cur.which])
-}
-Day=as.numeric(ceiling((Flt.table[,"min.time"]-min(Flt.table[,"min.time"])+.01)/(3600*24)))
-Flt.table=cbind(Flt.table,Day)
-Airplane=substr(as.character(flight_segs@data[,"flightid"]),1,2)
-flight_segs@data=cbind(flight_segs@data,Airplane)
 
 #fix some issues with OtterFl06 having effort off grid
-which.rows=which(flight_segs@data[,"flightid"]=="OtterFl06")
+#which.rows=which(flight_segs@data[,"flightid"]=="OtterFl06")
 #plot(flight_segs[which.rows[c(1:2,3,4:7)],])
-flight_segs=flight_segs[-which.rows[3],]
-
-#remove flights after 5/12
-flight_segs=flight_segs[-which(flight_segs@data[,"flightid"] %in% c("OtterFl19","OtterFl20","OtterFl21")),]
+#flight_segs=flight_segs[-which.rows[3],]
 
 #overlay flight tracks over grid cells, calculating cumulative distance flown in each
-int<-gIntersects(flight_segs,Data$Grid[[1]],byid=TRUE)
-vec <- vector(mode="list", length=nrow(flight_segs))
-for (i in seq(along=vec)) vec[[i]] <- try(gIntersection(flight_segs[i,],Data$Grid[[1]][int[,i],], byid=TRUE))
+int<-gIntersects(Tracks,Data$Grid[[1]],byid=TRUE)
+vec <- vector(mode="list", length=nrow(Tracks))
+for (i in seq(along=vec)) vec[[i]] <- try(gIntersection(Tracks[i,],Data$Grid[[1]][int[,i],], byid=TRUE))
 out <- do.call("rbind", vec)
 rn <- row.names(out)
 nrn <- do.call("rbind", strsplit(rn, " "))
 Length.df <- data.frame(Fl=nrn[,1], poly=as.numeric(as.character(nrn[,2])), len=gLength(out,byid=TRUE))
+Length.df$Day=rep(NA,nrow(Length.df))
+Length.df$Hour=Length.df$Day
+Length.df$diameter=Length.df$Day
 #calculate area surveyed for each of these flight_segment * grid cell combos
 Row.index=rep(0,nrow(Length.df))
-for(i in 1:length(Row.index))Row.index[i]=which(flight_segs[["seg_id"]]==as.character(Length.df[i,"Fl"]))
-Diam=flight_segs[["swath_diam"]][Row.index]
-DT=flight_segs[["min_dt"]][Row.index]+(flight_segs[["max_dt"]][Row.index]-flight_segs[["min_dt"]][Row.index])/2
-Length.df["day"]=as.POSIXlt(DT)$yday
-Length.df["day"]=Length.df["day"]-min(Length.df["day"])+1
-Length.df["hour"]=as.POSIXlt(DT)$hour+1
-
-
-
-#overwrite swath diameter using on effort spatial points if they overlap in a cell (flight segment values are used if all points data are corrupted for a given cell)
+Seg_ID = rownames(Tracks@data)
+for(i in 1:length(Row.index))Row.index[i]=which(Seg_ID==as.character(Length.df[i,"Fl"]))
+#get mean date & time, altitude for each flight/grid cell combination
 for(i in 1:nrow(Length.df)){
-  Which.pts=which(Cell.id==Length.df[i,"poly"])
-  if(length(Which.pts)>0){
-    Diam[i]=mean(Swath[which(Cell.id==Length.df$poly[i])])
-    
+  Which.points=which(Points@data[,"flightid"]==Tracks@data[Row.index[i],"flightid"] & Cell.id==Length.df[i,"poly"])
+  if(length(Which.points)>0){
+    #attach day and hour
+    Length.df[i,"Day"]=mean(Day[Which.points])
+    Alpha=2*pi*(Hour[Which.points]/24)
+    x.bar=mean(sin(Alpha))
+    y.bar=mean(cos(Alpha))
+    r=sqrt(x.bar^2+y.bar^2)
+    if(x.bar>0)alpha.bar=acos(y.bar/r)
+    else alpha.bar=2*pi-acos(y.bar/r)
+    Length.df[i,"Hour"]=round(alpha.bar*0.5/pi*24)
+    #attach mean diameter
+    Length.df[i,"diameter"]=mean(Points@data[Which.points,"diameter"])
   }
 }
+Which.missing=which(is.na(Length.df[,"Day"]))  #grid/time combos missing hour, day, altitude
+if(length(Which.missing>0)){
+  for(i in 1:length(Which.missing)){ #for these few missing values, simply input mean values from flight
+    Which.points=which(Points@data[,"flightid"]==Tracks@data[Row.index[i],"flightid"])
+    Length.df[Which.missing[i],"Day"]=mean(Day[Which.points])
+    Alpha=2*pi*(Hour[Which.points]/24)
+    x.bar=mean(sin(Alpha))
+    y.bar=mean(cos(Alpha))
+    r=sqrt(x.bar^2+y.bar^2)
+    if(x.bar>0)alpha.bar=acos(y.bar/r)
+    else alpha.bar=2*pi-acos(y.bar/r)
+    Length.df[Which.missing[i],"Hour"]=round(alpha.bar*0.5/pi*24)
+    #attach mean diameter
+    Length.df[Which.missing[i],"diameter"]=mean(Points@data[Which.points,"diameter"])
+  }
+}
+
+
+
 #total area surveyed in each flight * grid cell combo
 Area.hab=1-Data$Grid[[1]]@data[,"land_cover"]
-Length.df["area"]=Length.df[,"len"]*0.001*(Diam*.001)/(625*Area.hab[Length.df[,"poly"]])  #proportional area surveyed for each cell
+Length.df$area=Length.df[,"len"]*0.001*(Length.df$diameter*.001)/(625*Area.hab[Length.df[,"poly"]])  #proportional area surveyed for each cell
 
 #Combine area from cells surveyed by more than one flight segment in same day
-Mapping=matrix(0,nrow(Length.df),2)
+# (this shouldn't happen with above code - the following includes some artifacts
+# from BOSS analysis with constant abundance over time)
+Mapping=matrix(0,nrow(Length.df),3)  #includes cell, day, hour
 Area.trans=rep(0,nrow(Length.df))
 icounter=0
 icounter2=0
@@ -150,11 +205,12 @@ while(sum(I.processed)<nrow(Length.df)){
   if(I.processed[icounter]==0){
     icounter2=icounter2+1
     cur.poly=Length.df[icounter,"poly"]
-    cur.day=Length.df[icounter,"day"]
+    cur.day=Length.df[icounter,"Day"]
     cur.area=Length.df[icounter,"area"]
+    cur.hour=Length.df[icounter,"Hour"]
     Area.trans[icounter2]=cur.area
-    Mapping[icounter2,]=c(cur.poly,cur.day)
-    Which.eq=which(Length.df[,"poly"]==cur.poly & Length.df[,"day"]==cur.day)
+    Mapping[icounter2,]=c(cur.poly,cur.day,cur.hour)
+    Which.eq=which(Length.df[,"poly"]==cur.poly & Length.df[,"Day"]==cur.day)
     if(length(Which.eq)>1){
       Area.trans[icounter2]=Area.trans[icounter2]+sum(Length.df[Which.eq[2:length(Which.eq)],"area"])
       I.processed[Which.eq[2:length(Which.eq)]]=1
@@ -165,8 +221,39 @@ while(sum(I.processed)<nrow(Length.df)){
 Area.trans=Area.trans[1:icounter2]
 Mapping=Mapping[1:icounter2,]
 
-  
-Effort=list(Mapping=Mapping,Area.trans=Area.trans,Area.hab=Area.hab)
-save(Effort,file="Effort2012_BOSSst.Rdata")
+
+
+Count.data=data.frame(matrix(0,nrow(Hotspots),4))
+colnames(Count.data)=c("Transect","Photo","Obs","Group")
+for(i in 1:nrow(Count.data))Count.data[i,"Transect"]=which(Mapping[,1]==Cell.id.hs[i] & Mapping[,2]==Day.hs[i])
+
+Count.data[,"Transect"]=(Mapping[,2]-1)*S+Mapping[,1]
+Count.data[,"Photo"]=(Hotspots@data[,"hotspot_found"]=="yes")+0
+Count.data[,"Obs"]=NA
+Hotspots@data[which(is.na(Hotspots@data[,"hotspot_type"])),"hotspot_type"]="unknown"
+for(i in 1:nrow(Count.data)){
+  if(Hotspots@data[i,"hotspot_found"]=="yes"){
+    if(Hotspots@data[i,"species"]%in%"sd" & Hotspots@data[i,"species_conf"]%in%"guess")Count.data[i,"Obs"]=1
+    if(Hotspots@data[i,"species"]%in%"sd" & Hotspots@data[i,"species_conf"]%in%"likely")Count.data[i,"Obs"]=2
+    if(Hotspots@data[i,"species"]%in%"sd" & Hotspots@data[i,"species_conf"]%in%"pos")Count.data[i,"Obs"]=3    
+    if(Hotspots@data[i,"species"]%in%"rn" & Hotspots@data[i,"species_conf"]%in%"guess")Count.data[i,"Obs"]=4
+    if(Hotspots@data[i,"species"]%in%"rn" & Hotspots@data[i,"species_conf"]%in%"likely")Count.data[i,"Obs"]=5
+    if(Hotspots@data[i,"species"]%in%"rn" & Hotspots@data[i,"species_conf"]%in%"pos")Count.data[i,"Obs"]=6
+    if(Hotspots@data[i,"species"]%in%"bd" & Hotspots@data[i,"species_conf"]%in%"guess")Count.data[i,"Obs"]=7
+    if(Hotspots@data[i,"species"]%in%"bd" & Hotspots@data[i,"species_conf"]%in%"likely")Count.data[i,"Obs"]=8
+    if(Hotspots@data[i,"species"]%in%"bd" & Hotspots@data[i,"species_conf"]%in%"pos")Count.data[i,"Obs"]=9
+    if(Hotspots@data[i,"species"]%in%"rd" & Hotspots@data[i,"species_conf"]%in%"guess")Count.data[i,"Obs"]=10
+    if(Hotspots@data[i,"species"]%in%"rd" & Hotspots@data[i,"species_conf"]%in%"likely")Count.data[i,"Obs"]=11
+    if(Hotspots@data[i,"species"]%in%"rd" & Hotspots@data[i,"species_conf"]%in%"pos")Count.data[i,"Obs"]=12
+    if(Hotspots@data[i,"hotspot_type"]%in%"seal" & Hotspots@data[i,"species"]%in%"unk")Count.data[i,"Obs"]=13   #guess
+    if(Hotspots@data[i,"hotspot_found"]%in%"yes" & Hotspots@data[i,"hotspot_type"]!="seal")Count.data[i,"Obs"]=14  #other
+  }
+}
+Count.data[,"Group"]=Hotspots@data[,"numseals"]
+Count.data[which(Count.data[,"Obs"]==14),"Group"]=1  #change group size to 1 for unknowns
+    
+
+Effort=list(Mapping=Mapping,Area.trans=Area.trans,Area.hab=Area.hab,Count.data=Count.data)
+save(Effort,file="c:/users/paul.conn/git/BOSSst/Effort2012_BOSSst_5Sep2014.Rdata")
 
 

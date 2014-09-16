@@ -15,7 +15,7 @@
 #' @param Area.trans	A vector giving the effective area covered by each transect as fraction of total area in the strata it is located
 #' @param DayHour A (n.transect X 2) matrix providing row and column entries into the Thin array. Each row corresponds to an entry in Mapping
 #' @param Thin An (n.species X n.days X n.hours X n.iter) array providing n.iter posterior samples of the thinning parameters
-#' @param Prop.photo A vector giving the proportion of of the area sampled in each transect that is photographed
+#' @param Prop.photo A vector giving the proportion of of the area sampled in each transect that is photographed (still needed for GOF??)
 #' @param n.species An integer giving the true number of species
 #' @param n.obs.cov	Number of observer covariates (e.g., visibility, etc.)
 #' @param Hab.cov	A data.frame object giving covariates thought to influence abundance intensity at strata level; column names index individual covariates; # rows = S*T
@@ -47,7 +47,6 @@
 #'	"thin": if specified, how many iterations to skip between recorded posterior samples;
 #'	"adapt": if adapt==TRUE, adapts MCMC proposals 
 #'  "n.adapt": if adapt==TRUE, number of adapt iterations to employ (note: need to make burnin>n.adapt)
-#'  "MH.omega" A matrix providing standard deviations for Langevin-Hastings proposals (rows: species; columns: number of time steps)
 #'  "MH.N" vector of standard deviation for total abundance MH updates (1 for each species)
 #'  "fix.tau.epsilon" If TRUE, fixes tau.epsilon to 100
 #'  "species.optim" If TRUE, optimizes species updates [FALSE uses MH algorithm]
@@ -66,6 +65,7 @@
 #'  "beta0.tau.rw2" prior precision for knot intercepts in rw2 model
 #'  "beta1.tau.rw2" prior precision for knot slopes in rw2 model
 #' @param post.loss If TRUE, calculates observed values and posterior predictions for detection data to use with posterior predictive loss functions
+#' @param Surveyed If provided, a vector that gives the rows of Dat that correspond to surveyed locations to help set initial abundance values (if extra zeros included, don't include those here)
 #' @param True.species if provided, this vector of true species values is used during estimation (for debugging only)
 #' @param Omega.true If provided, this array gives true Omega values for debugging
 #' @return returns a list with the following objecs: 
@@ -77,7 +77,7 @@
 #' @keywords areal model, data augmentation, distance sampling, mcmc, reversible jump
 #' @author Paul B. Conn \email{paul.conn@@noaa.gov} 
 #' @examples print("example analysis included in the script run_BOSS_sims.R")
-hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,Prop.photo=Prop.photo,Hab.cov,Obs.cov,Hab.formula,Cov.prior.pdf,Cov.prior.parms,Cov.prior.fixed,Cov.prior.n,n.species=1,n.obs.cov=0,spat.ind=FALSE,srr.tol=0.5,Psi,Inits=NULL,grps=FALSE,Control,adapt=TRUE,Prior.pars,post.loss=TRUE,True.species=NULL,Alpha.true=NULL,Omega.true=NULL,Eta.true=NULL,DEBUG=FALSE){
+hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,Prop.photo=Prop.photo,Hab.cov,Obs.cov,Hab.formula,Cov.prior.pdf,Cov.prior.parms,Cov.prior.fixed,Cov.prior.n,n.species=1,n.obs.cov=0,spat.ind=FALSE,srr.tol=0.5,Psi,Inits=NULL,grps=FALSE,Control,adapt=TRUE,Prior.pars,post.loss=TRUE,Surveyed=NULL,True.species=NULL,Alpha.true=NULL,Omega.true=NULL,Eta.true=NULL,DEBUG=FALSE){
   require(mvtnorm)
 	require(Matrix)
 	require(truncnorm)
@@ -92,6 +92,9 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
 	
 	#By no means exhaustive checking to make sure input values are internally consistent
   #More later...	
+  if(sum(Dat[,"Photo"]==TRUE & is.na(Dat[,"Obs"])==TRUE)>0)cat("\n ERROR: some observations are NA while a photo is present.  This is not allowed")
+  if(Control$burnin%%Control$thin != 0)cat("\n ERROR: Control$burnin must be a multiple of Control$thin")
+  if(min(DayHour)<=0 | sum(DayHour%%1)>0)cat("\n ERROR: all elements of DayHour must be positive integers")
   
 	#if(length(unique(Dat[,3]))>1)Dat[,3]=as.factor(Dat[,3])  #convert species to factors if not already
 	cur.colnames=colnames(Dat)
@@ -100,12 +103,25 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
 	if(length(colnames(Dat))!=length(cur.colnames))cat("\n ERROR: mismatch between dimension of Dat and expected columns: check to make sure n.obs.cov, etc. correct")
 	colnames(Dat)=cur.colnames
   
+  #sorted data in increasing order of time, etc.
+  Tmp.mapping=(Mapping[,2]-1)*S+Mapping[,1]
+  Order=rank(Tmp.mapping)
+  Mapping[Order,]=Mapping
+  Area.trans[Order]=Area.trans
+  DayHour[Order,]=DayHour
+  Prop.photo[Order]=Prop.photo
+  Dat[,"Transect"]=Order[Dat[,"Transect"]]
+  Order=rank(Dat[,"Transect"],ties.method="first")
+  Dat[Order,]=Dat
+  if(is.null(Obs.cov)==FALSE)Obs.cov=Obs.cov[Order]
+  
   CellTime=Mapping
   Mapping=(Mapping[,2]-1)*S+Mapping[,1]  #convert two dimensional mapping to one dimensional mapping
 	t.steps=ceiling(max(Mapping)/S)  #currently assuming we're not projecting abundance ahead in time past the last survey
-	
+  if(length(Area.hab)==S)Area.hab=rep(Area.hab,t.steps)
+  
   if(is.null(True.species))Control$update.sp=TRUE
-  else Control$update.sp=FALSE
+  if(is.null(True.species)==FALSE)Control$update.sp=FALSE
   
   #convert character entries to factors
   for(i in 1:ncol(Dat))if(is.character(Dat[,i])&length(unique(Dat[,i]))>1)Dat[,i]=as.factor(Dat[,i])
@@ -210,7 +226,7 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
 		}
 	}  
 
-	Par=generate_inits_BOSSst(t.steps=t.steps,DM.hab=DM.hab,N.hab.par=N.hab.par,G.transect=G.transect,thin.mean=apply(Thin,1,'mean'),Area.trans=Area.trans,Area.hab=Area.hab,Mapping=Mapping,spat.ind=spat.ind,grp.mean=Cov.prior.parms[,1,1])	
+	Par=generate_inits_BOSSst(t.steps=t.steps,Surveyed=Surveyed,DM.hab=DM.hab,N.hab.par=N.hab.par,G.transect=G.transect,thin.mean=apply(Thin,1,'mean'),Area.trans=Area.trans,Area.hab=Area.hab,Mapping=Mapping,spat.ind=spat.ind,grp.mean=Cov.prior.parms[,1,1])	
   Par$Psi=Psi[,,sample(dim(Psi)[3],1)]
   
   if(is.null(Inits)==FALSE){  #replace random inits with user provided inits for all parameters specified
@@ -251,7 +267,7 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
 	}
   
 	Meta=list(t.steps=t.steps,n.transects=n.transects,n.species=n.species,S=S,spat.ind=spat.ind,Area.hab=Area.hab,Area.trans=Area.trans,
-      DayHour=DayHour,Thin=Thin,Prop.photo=Prop.photo,Mapping=Mapping,Covered.area=Covered.area,
+      K=K,DayHour=DayHour,Thin=Thin,Prop.photo=Prop.photo,Mapping=Mapping,Covered.area=Covered.area,
 			factor.ind=factor.ind,Levels=Levels,CellTime=CellTime,
 			G.transect=G.transect,N.transect=N.transect,grps=grps,n.ind.cov=n.ind.cov,
 			Cov.prior.pdf=Cov.prior.pdf,Cov.prior.parms=Cov.prior.parms,Cov.prior.fixed=Cov.prior.fixed,Cov.prior.n=Cov.prior.n,

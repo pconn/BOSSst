@@ -24,6 +24,7 @@
 sim_data_generic<-function(n.species,S,t.steps,n.transects,line.width,delta=0,buffer=FALSE){
   source('./BOSSst/R/util_funcs.R')
   source('./BOSSst/R/sim_funcs.R')
+
   
   if(sqrt(S)%%1>0)cat("error in sim_data_generic; S must be a square number \n")
    
