@@ -111,6 +111,7 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
   DayHour[Order,]=DayHour
   Prop.photo[Order]=Prop.photo
   Dat[,"Transect"]=Order[Dat[,"Transect"]]
+  Surveyed=Order[Surveyed]
   Order=rank(Dat[,"Transect"],ties.method="first")
   Dat[Order,]=Dat
   if(is.null(Obs.cov)==FALSE)Obs.cov=Obs.cov[Order]

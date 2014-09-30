@@ -1,6 +1,6 @@
 #' generate initial values for misID model if not already specified by user
 #' @param t.steps number of time steps
-#' @param Surveyed If provided, which cells to use in extrapolating density to whole grid (e.g. don't include extra `0' data) 
+#' @param Surveyed  If provided, which cells to use in extrapolating density (i.e. not including 'extra' zeros)
 #' @param DM.hab   a list vector of design matrices for the fixed effects model (one for each species)
 #' @param N.hab.par  vector giving number of parameters for the fixed effects model for each species
 #' @param G.transect a matrix of the number of groups of animals in area covered by each transect; each row gives a separate species		
@@ -14,18 +14,24 @@
 #' @export
 #' @keywords initial values, mcmc
 #' @author Paul B. Conn
-generate_inits_BOSSst<-function(t.steps,Surveyed=NULL,DM.hab,N.hab.par,G.transect,thin.mean,Area.trans,Area.hab,Mapping,spat.ind,grp.mean){		
+generate_inits_BOSSst<-function(t.steps,Surveyed=NULL,DM.hab,N.hab.par,G.transect,thin.mean=thin.mean,Area.trans,Area.hab,Mapping,spat.ind,grp.mean){		
   n.species=nrow(G.transect)
   n.cells=length(Area.hab)
   S=n.cells/t.steps
   if(is.null(Surveyed))G.tot=ceiling(S*apply(G.transect,1,'sum')/(sum(Area.trans)*thin.mean))
   else G.tot=ceiling(S*apply(G.transect[,Surveyed],1,'sum')/(sum(Area.trans[Surveyed])*thin.mean))
   hab=matrix(0,n.species,max(N.hab.par))
-  for(isp in 1:n.species)hab[isp,]=solve(crossprod(DM.hab[[isp]][Mapping,]),t(DM.hab[[isp]][Mapping,]))%*%log(G.transect[isp,]+1)
+  for(isp in 1:n.species){
+    hab[isp,1:N.hab.par[isp]]=nlminb(start=rep(0,N.hab.par[isp]),multinom_logL,X=DM.hab[[isp]][Mapping,],C=G.transect[isp,],p=Area.trans*Area.hab[Mapping])$par
+      #solve(crossprod(DM.hab[[isp]][Mapping,]),t(DM.hab[[isp]][Mapping,]))%*%log(G.transect[isp,]/Area.trans+.1)
+  }
   Par=list(G.tot=G.tot,hab=hab,Eta=matrix(rnorm(n.species*n.cells),n.species,n.cells),
            tau.eta=runif(n.species,0.5,2),tau.eps=runif(n.species,0.5,2))
   Par$G=matrix(0,n.species,n.cells)
-  for(isp in 1:n.species)Par$G[isp,]=rep(rmultinom(1,G.tot[isp],1/S*Area.hab[1:S]),t.steps)
+  for(isp in 1:n.species){
+    Pi=exp(DM.hab[[isp]]%*%hab[isp,])*Area.hab
+    for(it in 1:t.steps)Par$G[isp,]=rmultinom(1,G.tot[isp],Pi[((it-1)*S+1):((it-1)*S+S)])
+  }
   I.error=(G.transect>Par$G[Mapping])
   if(sum(I.error)>0){
     Which.error=which(G.transect>Par$G[Mapping])
@@ -38,6 +44,11 @@ generate_inits_BOSSst<-function(t.steps,Surveyed=NULL,DM.hab,N.hab.par,G.transec
   Par
 }
 
+#function to compute log likelihood for habitat covariate values
+multinom_logL<-function(Par,X,C,p){
+  Pi=exp(X%*%Par)*p
+  -dmultinom(C,size=sum(C),prob=Pi,log=TRUE)
+}
 
 sample_nophoto_sp<-function(itrans,Lam,n.sp)sample(n.sp,1,prob=Lam[,itrans])
 

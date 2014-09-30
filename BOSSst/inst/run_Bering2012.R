@@ -61,7 +61,7 @@ Mapping.1d=(Mapping[,2]-1)*S+Mapping[,1]
 Which.no.1d=(Which.no[,2]-1)*S+Which.no[,1]
 I.sampled=Which.no.1d%in%Mapping.1d
 I.sampled2=Mapping.1d%in%Which.no.1d
-Area.trans[which(I.sampled2==TRUE)]=0.9  #change area sampled in 0 ice cells to 0.9
+#Area.trans[which(I.sampled2==TRUE)]=0.9  #change area sampled in 0 ice cells to 0.9 #no, this messes up initial density estimates
 Which.no.1d=Which.no.1d[which(I.sampled==0)]
 Which.no=Which.no[which(I.sampled==0),]
 #now add in 0 ice cells to list of sampled cells and adjust related quantities
@@ -117,7 +117,7 @@ Hab.cov[c(18822,21975),"ice2"]=0.25
 
 hab.formula=vector("list",n.species)
 
-for(isp in 1:n.species)hab.formula[[isp]]=~0+ice_conc+ice2+sqrt_edge+dist_shelf+dist_mainland+dist_contour
+for(isp in 1:n.species)hab.formula[[isp]]=~0+ice_conc+ice2#+sqrt_edge+dist_shelf+dist_mainland+dist_contour
 Cov.prior.parms=array(0,dim=c(n.species,2,1))
 Cov.prior.parms[,1,1]=1  #gamma(1,1) on E(group size)-1
 Cov.prior.parms[,2,1]=1
@@ -137,7 +137,7 @@ Prior.pars=list(beta.tau=0.0001,
                 beta0.tau.rw2=1,
                 beta1.tau.rw2=10)
 
-Control=list(iter=125000,burnin=2000,thin=50,n.adapt=2000,predict=TRUE,MH.N=rep(0.2,n.species),adapt=TRUE,fix.tau.epsilon=FALSE,species.optim=TRUE)        
+Control=list(iter=52000,burnin=2000,thin=25,n.adapt=2000,predict=TRUE,MH.N=rep(0.2,n.species),adapt=TRUE,fix.tau.epsilon=FALSE,species.optim=TRUE)        
 
 
 Dat[,4]=as.numeric(as.character(Dat[,4]))
@@ -171,10 +171,12 @@ save(MCMC,file=out.file)
 
 
 
-Cur.G=matrix(apply(MCMC$Post$G[isp,,],2,'median'),S,t.steps)
-for(i in 1:t.steps){
-  plot_N_map(i,Cur.G,Grid=Data$Grid)
-}
+Cur.G=matrix(apply(MCMC$Post$G[1,,],2,'median'),S,t.steps)
+#for(i in 1:t.steps){
+plot_N_map(1,Cur.G,Grid=Data$Grid)
+plot_N_map(10,Cur.G,Grid=Data$Grid)
+plot_N_map(20,Cur.G,Grid=Data$Grid)
+#}
 #calculate posterior for N
 #MCMC$MCMC$N=apply(MCMC$MCMC$Pred,c(2,3),'sum')
 #N.est=apply(MCMC$MCMC$N,1,'mean')
@@ -185,9 +187,9 @@ for(i in 1:t.steps){
 
 #plot(apply(MCMC$MCMC$Pred,3,'sum')/30)
 
-#plot_N_map(1,as.matrix(Sim.data$Data$Grid[[5]]@data[,1],ncol=1),Grid=Data$Grid,leg.title="Covariate")
+#Plot_N_map(1,as.matrix(Sim.data$Data$Grid[[5]]@data[,1],ncol=1),Grid=Data$Grid,leg.title="Covariate")
 #plot_N_map(1,Sim.data$N,Grid=Data$Grid,leg.title="True Abundance")
-#plot_N_map(1,apply(MCMC$MCMC$Pred,c(1,2),'median'),Grid=Data$Grid,leg.title="Abundance")
+#plot_N_map(1,apply(MCMC$Post$$Pred,c(1,2),'median'),Grid=Data$Grid,leg.title="Abundance")
 #plot_N_map(15,Sim.data$N,Grid=Data$Grid,leg.title="True Abundance")
 #plot_N_map(17,apply(MCMC$MCMC$Pred,c(1,2),'median'),Grid=Data$Grid,leg.title="Abundance")
 #plot_N_map(20,Sim.data$N,Grid=Data$Grid,leg.title="True Abundance")
