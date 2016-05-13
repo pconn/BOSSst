@@ -50,6 +50,14 @@
 #'  "MH.N" vector of standard deviation for total abundance MH updates (1 for each species)
 #'  "fix.tau.epsilon" If TRUE, fixes tau.epsilon to 100
 #'  "species.optim" If TRUE, optimizes species updates [FALSE uses MH algorithm]
+#'  "update.sp" If FALSE (default is TRUE), "True.species" must be provided and species updates won't be conducted
+#'  "misID" If TRUE (default), update misID params
+#'  "est.alpha": if TRUE, estimate full scale spatio-temporal random effects; if FALSE, just estimate intercept and slope for each knot 
+#'  "n.files": an integer, which if included gives the number of files to house posterior output (can be used to substantially reduce RAM requirements); default = 1
+#'  "fname": base filename (no extension) to house posterior summaries
+#'  "post.loss"  If TRUE, observed and predicted detections are compiled for posterior predictive loss 
+#'  "GOF"        If TRUE, calculate several posterior predictive checks.  ** Note: Some of these are hardwired for BOSS data ** 
+#'  "gIVH"       If TRUE, calculate generalized independent variable hull
 #' @param Inits	An (optional) list object providing initial values for model parameters, with the following objects:
 #'  "hab": Initial values for habitat linear predictor parameters for poisson model;
 #'	"G": Gives true group abundance (vector; 1 entry for each species)
@@ -64,8 +72,7 @@
 #'  "b.eta" beta param for gamma prior precision of spatio-temporal process
 #'  "beta0.tau.rw2" prior precision for knot intercepts in rw2 model
 #'  "beta1.tau.rw2" prior precision for knot slopes in rw2 model
-#' @param post.loss If TRUE, calculates observed values and posterior predictions for detection data to use with posterior predictive loss functions
-#' @param Surveyed If provided, a vector that gives the rows of Dat that correspond to surveyed locations to help set initial abundance values (if extra zeros included, don't include those here)
+#' @param Surveyed If provided, a vector that gives the rows of Mapping that correspond to surveyed locations to help set initial abundance values (if extra zeros included, don't include those here)
 #' @param True.species if provided, this vector of true species values is used during estimation (for debugging only)
 #' @param Omega.true If provided, this array gives true Omega values for debugging
 #' @return returns a list with the following objecs: 
@@ -77,7 +84,7 @@
 #' @keywords areal model, data augmentation, distance sampling, mcmc, reversible jump
 #' @author Paul B. Conn \email{paul.conn@@noaa.gov} 
 #' @examples print("example analysis included in the script run_BOSS_sims.R")
-hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,Prop.photo=Prop.photo,Hab.cov,Obs.cov,Hab.formula,Cov.prior.pdf,Cov.prior.parms,Cov.prior.fixed,Cov.prior.n,n.species=1,n.obs.cov=0,spat.ind=FALSE,srr.tol=0.5,Psi,Inits=NULL,grps=FALSE,Control,adapt=TRUE,Prior.pars,post.loss=TRUE,Surveyed=NULL,True.species=NULL,Alpha.true=NULL,Omega.true=NULL,Eta.true=NULL,DEBUG=FALSE){
+hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,Prop.photo=Prop.photo,Hab.cov,Obs.cov,Hab.formula,Cov.prior.pdf,Cov.prior.parms,Cov.prior.fixed,Cov.prior.n,n.species=1,n.obs.cov=0,spat.ind=FALSE,srr.tol=0.5,Psi,Inits=NULL,grps=FALSE,Control,adapt=TRUE,Prior.pars,Surveyed=NULL,True.species=NULL,Alpha.true=NULL,Omega.true=NULL,Eta.true=NULL,DEBUG=FALSE,n.files=1){
   require(mvtnorm)
 	require(Matrix)
 	require(truncnorm)
@@ -95,7 +102,9 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
   if(sum(Dat[,"Photo"]==TRUE & is.na(Dat[,"Obs"])==TRUE)>0)cat("\n ERROR: some observations are NA while a photo is present.  This is not allowed")
   if(Control$burnin%%Control$thin != 0)cat("\n ERROR: Control$burnin must be a multiple of Control$thin")
   if(min(DayHour)<=0 | sum(DayHour%%1)>0)cat("\n ERROR: all elements of DayHour must be positive integers")
-  
+  if(is.null(Control$n.files))Control$n.files=1
+  if(((Control$iter-Control$burnin)/Control$thin)%%Control$n.files != 0)cat('ERROR: Control$n.files must be a common denominator of the number of MCMC iterations to save')
+    
 	#if(length(unique(Dat[,3]))>1)Dat[,3]=as.factor(Dat[,3])  #convert species to factors if not already
 	cur.colnames=colnames(Dat)
   cur.colnames[1:3]=c("Transect","Photo","Species")
@@ -111,9 +120,10 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
   DayHour[Order,]=DayHour
   Prop.photo[Order]=Prop.photo
   Dat[,"Transect"]=Order[Dat[,"Transect"]]
-  Surveyed=Order[Surveyed]
+  if(is.null(Surveyed)==FALSE)Surveyed=sort(Order[Surveyed])
   Order=rank(Dat[,"Transect"],ties.method="first")
   Dat[Order,]=Dat
+  if(is.null(True.species)==FALSE)True.species[Order]=True.species
   if(is.null(Obs.cov)==FALSE)Obs.cov=Obs.cov[Order]
   
   CellTime=Mapping
@@ -121,9 +131,9 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
 	t.steps=ceiling(max(Mapping)/S)  #currently assuming we're not projecting abundance ahead in time past the last survey
   if(length(Area.hab)==S)Area.hab=rep(Area.hab,t.steps)
   
-  if(is.null(True.species))Control$update.sp=TRUE
-  if(is.null(True.species)==FALSE)Control$update.sp=FALSE
-  
+	if(is.null(Control$misID))Control$misID=TRUE
+	if(is.null(Control$update.sp))Control$update.sp=TRUE
+
   #convert character entries to factors
   for(i in 1:ncol(Dat))if(is.character(Dat[,i])&length(unique(Dat[,i]))>1)Dat[,i]=as.factor(Dat[,i])
   
@@ -184,7 +194,7 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
   }
   
 	  
-	if(Control$update.sp==FALSE)True.sp=True.species #for debugging
+	if(is.null(True.species)==FALSE)True.sp=True.species #for debugging
 	Dat.num=cbind(Dat.num[,1:3],True.sp,Dat.num[,4:ncol(Dat.num)])
 	cur.colnames=colnames(Dat)
 	cur.colnames[3]="Obs"
@@ -228,7 +238,7 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
 	}  
 
 	Par=generate_inits_BOSSst(t.steps=t.steps,Surveyed=Surveyed,DM.hab=DM.hab,N.hab.par=N.hab.par,G.transect=G.transect,thin.mean=apply(Thin,1,'mean'),Area.trans=Area.trans,Area.hab=Area.hab,Mapping=Mapping,spat.ind=spat.ind,grp.mean=Cov.prior.parms[,1,1])	
-  Par$Psi=Psi[,,sample(dim(Psi)[3],1)]
+  if(is.null(Psi)==FALSE)Par$Psi=Psi[,,sample(dim(Psi)[3],1)]
   
   if(is.null(Inits)==FALSE){  #replace random inits with user provided inits for all parameters specified
 		I.init=names(Inits)
@@ -272,7 +282,7 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
 			factor.ind=factor.ind,Levels=Levels,CellTime=CellTime,
 			G.transect=G.transect,N.transect=N.transect,grps=grps,n.ind.cov=n.ind.cov,
 			Cov.prior.pdf=Cov.prior.pdf,Cov.prior.parms=Cov.prior.parms,Cov.prior.fixed=Cov.prior.fixed,Cov.prior.n=Cov.prior.n,
-			N.hab.par=N.hab.par,post.loss=post.loss)
+			N.hab.par=N.hab.par)
   
 	cur.iter=Control$adapt
   adapt=1

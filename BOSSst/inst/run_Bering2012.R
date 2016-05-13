@@ -10,15 +10,16 @@ source('./BOSSst/R/sim_funcs.R')
 data(AlaskaBeringData2012_17April2014)  #boss grid, ice data
 data(Knot_cell_distances) #load object giving K matrix, Q for knots
 load("Effort2012_BOSSst_5Sep2014.Rdata")  #load effort data indicating grid cells and times surveyed (data produced with format_effort.R)
-load('c:/users/paul.conn/git/BOSS/BOSS/data/p13.Rdata')  #read in confusion array
-load('c:/users/paul.conn/git/BOSSst/Haulout_samples.Rdat')  #read in haulout proportion MCMC samples
+load('p13.RData')  #read in confusion array
+load('Haulout_samples.Rdat')  #read in haulout proportion MCMC samples
 
 set.seed(123454)
 t.steps=29
 n.species=5  #last is `other'
 n.transects=length(Effort$Area.trans)
-n.zeros=1000  #number of 'extra zeros' to put in (max is around 3000; to use max set n.zeros=NA)
+n.zeros=100  #number of 'extra zeros' to put in (max is around 3000; to use max set n.zeros=NA)
 Old.Grid=Data$Grid
+S=nrow(Data$Grid[[1]])
 Data$Grid=vector('list',t.steps)
 for(it in 1:t.steps){
   Data$Grid[[it]]=Old.Grid[[it+3]]
@@ -42,6 +43,26 @@ rm(Effort)
 #change observations from NA to 'unknown' for observations with photo =1 and obs=NA to other
 Temp=which(Dat[,"Photo"] & is.na(Dat$Obs))
 if(length(Temp>0))Dat[Temp,"Obs"]=14
+
+#look for density outliers
+C.tot=rep(0,n.transects)
+for(i in 1:n.transects)C.tot[i]=length(which(Dat[,"Transect"]==i))
+C.tot=C.tot/Area.trans
+summary(C.tot)
+
+#delete effort for cells for which Area.trans<0.001
+Which.yes=which(Area.trans>0.001)
+New.pl=rep(0,n.transects)
+Area.trans=Area.trans[Which.yes]
+Mapping=Mapping[Which.yes,]
+New.pl[Which.yes]=c(1:length(Which.yes))
+Dat[,"Transect"]=New.pl[Dat[,"Transect"]]
+Dat=Dat[-which(Dat[,"Transect"]==0),]  #remove observations where transect area <0.001
+n.transects=length(Area.trans)
+
+#restrict to seals w photos only
+Dat=Dat[which(Dat[,"Photo"]==1),]
+Dat=Dat[-which(Dat[,"Obs"]==14),]
 
 #add in some 'zero' data to anchor model in places where there's no ice
 Temp=which(Data$Grid[[1]]@data[,"ice_conc"]<.001)
@@ -98,8 +119,9 @@ rm(Haulout.samples)
 
 
 #Define misclassification matrix  [species observations follow p13 order - spotted (guess, likely pos), ribbon, bearded, ringed]
-Psi=array(0,dim=c(5,14,dim(p13)[3]))
-Psi[1:4,1:13,]=p13[1:4,1:13,]
+Which.sample=sample(c(1:dim(p13)[3]),1000)  #reduce posterior to 1000 samples to reduce memory requirements
+Psi=array(0,dim=c(5,14,1000))
+Psi[1:4,1:13,]=p13[1:4,1:13,Which.sample]  
 Psi[5,14,]=1  #'other' always gets a 14 
 rm(p13)
 
@@ -111,13 +133,25 @@ colnames(Hab.cov)=colnames(Data$Grid[[1]]@data)
 for(it in 1:t.steps){
   Hab.cov[((it-1)*S+1):((it-1)*S+S),]=Data$Grid[[it]]@data
 }
-#TEMPORARILY INCREASE ICE in 2 cells to decrease sea ice effect at 0 sea ice concentration
-Hab.cov[c(18822,21975),"ice_conc"]=0.5
-Hab.cov[c(18822,21975),"ice2"]=0.25
+
+#look for seals seen where not much ice - cells that have ice<0.01 where seals are seen are replaced with average ice values for neighboring cells
+Which.less=which(Hab.cov[Mapping.1d,"ice_conc"]<0.01)
+for(iobs in 1:length(Which.less)){
+  cur.s=Mapping[Which.less[iobs],1]
+  cur.t=Mapping[Which.less[iobs],2]
+  new.ice=Data$Adj[cur.s,]%*%Data$Grid[[cur.t]][["ice_conc"]]/sum(Data$Adj[cur.s,])
+  Hab.cov[S*(cur.t-1)+cur.s,"ice_conc"]=new.ice
+  Hab.cov[S*(cur.t-1)+cur.s,"ice2"]=new.ice^2
+  cat(paste0('replaced cell ',cur.s,' time ',cur.t,' with original ice_conc=',Data$Grid[[cur.t]]@data[cur.s,"ice_conc"]," with ice=",new.ice,'\n'))
+}
+#take a look at where these occur
+#plot_N_map(1,as.matrix(Data$Grid[[17]][["ice_conc"]],ncol=1),highlight=1191,Grid=Data$Grid)
+#plot_N_map(1,as.matrix(Data$Grid[[15]][["ice_conc"]],ncol=1),highlight=636,Grid=Data$Grid)
+
 
 hab.formula=vector("list",n.species)
 
-for(isp in 1:n.species)hab.formula[[isp]]=~0+ice_conc+ice2#+sqrt_edge+dist_shelf+dist_mainland+dist_contour
+for(isp in 1:n.species)hab.formula[[isp]]=~0+ice_conc+ice2+sqrt_edge+dist_shelf+dist_mainland+dist_contour
 Cov.prior.parms=array(0,dim=c(n.species,2,1))
 Cov.prior.parms[,1,1]=1  #gamma(1,1) on E(group size)-1
 Cov.prior.parms[,2,1]=1
@@ -134,10 +168,10 @@ Prior.pars=list(beta.tau=0.0001,
                 b.eps=0.01,
                 a.eta=1,
                 b.eta=0.01,
-                beta0.tau.rw2=1,
-                beta1.tau.rw2=10)
+                beta0.tau.rw2=2,
+                beta1.tau.rw2=50)
 
-Control=list(iter=52000,burnin=2000,thin=25,n.adapt=2000,predict=TRUE,MH.N=rep(0.2,n.species),adapt=TRUE,fix.tau.epsilon=FALSE,species.optim=TRUE)        
+Control=list(iter=550000,burnin=50000,thin=250,n.adapt=2500,predict=TRUE,MH.N=rep(0.2,n.species),adapt=TRUE,fix.tau.epsilon=FALSE,species.optim=TRUE,update.sp=TRUE,est.alpha=FALSE,n.files=10,fname="./output/Bering2012_1camera_PostPred")        
 
 
 Dat[,4]=as.numeric(as.character(Dat[,4]))
@@ -151,7 +185,37 @@ n.obs.cov=0
 Psi=Psi
 post.loss=FALSE
 #True.sp=Sim.data$True.sp #if not null, sets all observations to have true species values (for debugging)
+
+#set initial true species to help with algorithm convergence
 True.sp=NULL
+True.sp=rep(0,nrow(Dat))
+for(i in 1:nrow(Dat)){
+  if(is.na(Dat[i,"Obs"])==FALSE){  
+    if(Dat[i,"Obs"]%in%c(1,2,3))True.sp[i]=1
+    if(Dat[i,"Obs"]%in%c(4,5,6))True.sp[i]=2
+    if(Dat[i,"Obs"]%in%c(7,8,9))True.sp[i]=3
+    if(Dat[i,"Obs"]%in%c(10,11,12))True.sp[i]=4
+    if(Dat[i,"Obs"]==13)True.sp[i]=sample(c(1:4),1)
+    if(Dat[i,"Obs"]==14)True.sp[i]=5   
+  }
+}
+#now tabulate counts by species and ecoregion to help set species for non-photographed
+n.eco.bins=length(tabulate(Hab.cov[,"Ecoregion"]))
+Tab.species=matrix(0,5,n.eco.bins)
+for(isp in 1:5){
+  Cur.dat=Dat[which(is.na(Dat[,"Obs"])==FALSE & True.sp==isp),]
+  Cur.map=Mapping[Cur.dat$Transect,]
+  Cur.eco=Hab.cov[(Cur.map[,2]-1)*S+Cur.map[,1],"Ecoregion"]
+  Tab.species[isp,]=tabulate(Cur.eco,nbins=n.eco.bins)
+}
+for(i in 1:nrow(Dat)){
+  if(is.na(Dat[i,"Obs"])){  
+    cur.map=Mapping[Dat[i,"Transect"],]
+    cur.eco=Hab.cov[(cur.map[2]-1)*S+cur.map[1],"Ecoregion"]
+    True.sp[i]=which(rmultinom(1,1,prob=Tab.species[,cur.eco])==1)
+  }
+}
+
 True.species=True.sp
 #Omega.true=Sim.data$Omega.true
 Omega.true=NULL
@@ -166,16 +230,20 @@ set.seed(12345)
 MCMC=hierarchical_boss_st(Dat=Dat,K=Data$K,Area.hab=Area.hab,Area.trans=Area.trans,Mapping=Mapping,DayHour=DayHour,Thin=Thin,Prop.photo=rep(0.5,n.transects),Hab.cov=Hab.cov,Obs.cov=NULL,Hab.formula=hab.formula,Cov.prior.pdf=Cov.prior.pdf,Cov.prior.parms=Cov.prior.parms,Cov.prior.fixed=Cov.prior.fixed,Cov.prior.n=Cov.prior.n,n.species=n.species,n.obs.cov=0,spat.ind=spat.ind,Psi=Psi,Inits=NULL,grps=TRUE,Control=Control,Prior.pars=Prior.pars,post.loss=post.loss,Surveyed=Surveyed,True.species=True.sp,Omega.true=Omega.true,Eta.true=Eta.true,Alpha.true=Alpha.true,DEBUG=TRUE)
 
 
-out.file="./Bering2012_1camera_MCMC.Rdata"
+out.file="./output/Bering2012_1camera_MCMC.Rdata"
 save(MCMC,file=out.file)
 
 
-
-Cur.G=matrix(apply(MCMC$Post$G[1,,],2,'median'),S,t.steps)
+#PostN=cat_preds(fname=Control$fname,n.files=Control$n.files)
+  
+#Cur.G=matrix(apply(PostN[4,1000:2000,],2,'median'),S,t.steps)
 #for(i in 1:t.steps){
-plot_N_map(1,Cur.G,Grid=Data$Grid)
-plot_N_map(10,Cur.G,Grid=Data$Grid)
-plot_N_map(20,Cur.G,Grid=Data$Grid)
+#plot_N_map(1,Cur.G,Grid=Data$Grid)
+#plot_N_map(5,Cur.G,Grid=Data$Grid)
+#plot_N_map(10,Cur.G,Grid=Data$Grid)
+#plot_N_map(15,Cur.G,Grid=Data$Grid)
+#plot_N_map(22,Cur.G,Grid=Data$Grid)
+#plot_N_map(27,Cur.G,Grid=Data$Grid)
 #}
 #calculate posterior for N
 #MCMC$MCMC$N=apply(MCMC$MCMC$Pred,c(2,3),'sum')

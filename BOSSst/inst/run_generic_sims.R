@@ -46,6 +46,9 @@ n.transects=nrow(Sim.data$Effort)
 #      fname=paste("simdata_gen",Model.list[igen],"_trans",N.transects[itrans],"_sim",isim,sep='')
 #      load(paste("./sim_generic_data/",fname,sep=''))
 Data=Sim.data$Data
+
+#for this run, eliminate observations without photographs
+
 #      if(igen==3)Data$Which.distances=Which.distances
 
 n.knots=length(Data$Knot.locations)
@@ -75,8 +78,9 @@ colnames(Hab.cov)=colnames(Data$Grid[[1]]@data)
 for(it in 1:t.steps){
   Hab.cov[((it-1)*S+1):((it-1)*S+S),]=Data$Grid[[it]]@data
 }
+Hab.cov$crap=rnorm(8000)
 hab.formula=vector("list",n.species)
-for(isp in 1:n.species)hab.formula[[isp]]=~0+matern+matern2
+for(isp in 1:n.species)hab.formula[[isp]]=~0+crap #+matern+matern2
 Cov.prior.parms=array(0,dim=c(n.species,2,1))
 Cov.prior.parms[,1,1]=2  #we'll put priors a little off from their true values; expected group sizes are 4 and 2 for each species
 Cov.prior.parms[,2,1]=1
@@ -94,15 +98,17 @@ Prior.pars=list(beta.tau=0.0001,
                 a.eta=1,
                 b.eta=0.01,
                 beta0.tau.rw2=1,
-                beta1.tau.rw2=10)
+                beta1.tau.rw2=50)
 
-Control=list(iter=605000,burnin=5000,thin=500,n.adapt=5000,predict=TRUE,MH.N=rep(0.2,n.species),adapt=TRUE,fix.tau.epsilon=FALSE,species.optim=TRUE)        
+Control=list(iter=1004000,burnin=4000,thin=500,n.adapt=4000,predict=TRUE,MH.N=rep(0.2,n.species),adapt=TRUE,fix.tau.epsilon=FALSE,est.alpha=TRUE,species.optim=TRUE,update.sp=TRUE,n.files=4,fname="./output/sim_PostPred_fullST")        
 
 Dat=Sim.data$Obs
+Dat=Dat[which(Dat[,"Photo"]==1),] #see if eliminating unphotographed seals helps with mixing...
 Area.hab=rep(1,S*t.steps)
 Mapping=Sim.data$Effort[,c("Cell","Time")]
 Area.trans=Sim.data$Effort$AreaSurveyed
-Prop.photo=rep(0.5,n.transects)
+Area.trans=Area.trans*0.5  #multiplying by 0.5 because I eliminate non-photographed seals
+Prop.photo=rep(0.5,n.transects)  #need to change if doing GOF
 Obs.cov=NULL
 Hab.formula=hab.formula
 n.obs.cov=0
@@ -117,13 +123,13 @@ True.sp=NULL
 Omega.true=NULL
 #Eta.true=Sim.data$Eta.true
 Eta.true=NULL
-Alpha.true=Sim.data$Alpha.true
-#Alpha.true=NULL
+#Alpha.true=Sim.data$Alpha.true
+Alpha.true=NULL
 
 set.seed(12345)
 MCMC=hierarchical_boss_st(Dat=Sim.data$Obs,K=Data$K,Area.hab=rep(1,S*t.steps),Area.trans=Sim.data$Effort[,"AreaSurveyed"],Mapping=Sim.data$Effort[,c("Cell","Time")],DayHour=DayHour,Thin=Thin,Prop.photo=rep(0.5,n.transects),Hab.cov=Hab.cov,Obs.cov=NULL,Hab.formula=hab.formula,Cov.prior.pdf=Cov.prior.pdf,Cov.prior.parms=Cov.prior.parms,Cov.prior.fixed=Cov.prior.fixed,Cov.prior.n=Cov.prior.n,n.species=n.species,n.obs.cov=0,spat.ind=spat.ind,Psi=Psi,Inits=NULL,grps=TRUE,Control=Control,Prior.pars=Prior.pars,post.loss=TRUE,True.species=True.sp,Omega.true=Omega.true,Eta.true=Eta.true,Alpha.true=Alpha.true,DEBUG=TRUE)
     
-save(MCMC,file="mcmc_generic_spupdates.Rdata")
+save(MCMC,file="mcmc_generic_REonly.Rdata")
 #Obs.data
 #Obs.data=Data$Count.data[which(Data$Count.data[,"Count"]>0),]
 #Cov=rep(0,nrow(Obs.data))
@@ -139,12 +145,25 @@ lines(N.true)
 #plot(apply(MCMC$MCMC$Pred,3,'sum')/30)
 
 #plot_N_map(1,as.matrix(Sim.data$Data$Grid[[5]]@data[,1],ncol=1),Grid=Data$Grid,leg.title="Covariate")
-Cur.G=matrix(Sim.data$G.true[isp,,],S,t.steps)
-Cur.G2=matrix(apply(MCMC$Post$G[isp,,],2,'median'),S,t.steps)
-for(i in 1:t.steps){
-  plot_N_map(i,Cur.G,Grid=Data$Grid)
-  plot_N_map(i,Cur.G2,Grid=Data$Grid)
-}
+isp=2
+Cur.G=matrix(Sim.data$N.true[isp,,],S,t.steps)
+PostN=cat_preds(fname=Control$fname,n.files=Control$n.files)
+Nhat=array(PostN,dim=c(4,2000,400,20))
+Cur.G2=apply(Nhat[isp,,,],c(2,3),"mean")
+
+plot_N_map(1,Cur.G,Grid=Data$Grid)
+plot_N_map(2,Cur.G,Grid=Data$Grid)
+plot_N_map(3,Cur.G,Grid=Data$Grid)
+plot_N_map(4,Cur.G,Grid=Data$Grid)
+
+plot_N_map(1,Cur.G2,Grid=Data$Grid)
+plot_N_map(2,Cur.G2,Grid=Data$Grid)
+plot_N_map(3,Cur.G2,Grid=Data$Grid)
+plot_N_map(4,Cur.G2,Grid=Data$Grid)
+
+
+plot_N_map(10,Cur.G2,Grid=Data$Grid)
+
 #plot_N_map(15,Sim.data$N,Grid=Data$Grid,leg.title="True Abundance")
 #plot_N_map(15,apply(MCMC$MCMC$Pred,c(1,2),'mean'),Grid=Data$Grid,leg.title="Abundance")
 #plot_N_map(20,Sim.data$N,Grid=Data$Grid,leg.title="True Abundance")

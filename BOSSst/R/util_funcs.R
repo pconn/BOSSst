@@ -1,6 +1,6 @@
 #' generate initial values for misID model if not already specified by user
 #' @param t.steps number of time steps
-#' @param Surveyed  If provided, which cells to use in extrapolating density (i.e. not including 'extra' zeros)
+#' @param Surveyed  If provided, which entries in "Mapping" to use in extrapolating density (i.e. not including 'extra' zeros)
 #' @param DM.hab   a list vector of design matrices for the fixed effects model (one for each species)
 #' @param N.hab.par  vector giving number of parameters for the fixed effects model for each species
 #' @param G.transect a matrix of the number of groups of animals in area covered by each transect; each row gives a separate species		
@@ -22,14 +22,14 @@ generate_inits_BOSSst<-function(t.steps,Surveyed=NULL,DM.hab,N.hab.par,G.transec
   else G.tot=ceiling(S*apply(G.transect[,Surveyed],1,'sum')/(sum(Area.trans[Surveyed])*thin.mean))
   hab=matrix(0,n.species,max(N.hab.par))
   for(isp in 1:n.species){
-    hab[isp,1:N.hab.par[isp]]=nlminb(start=rep(0,N.hab.par[isp]),multinom_logL,X=DM.hab[[isp]][Mapping,],C=G.transect[isp,],p=Area.trans*Area.hab[Mapping])$par
+    hab[isp,1:N.hab.par[isp]]=nlminb(start=rep(0,N.hab.par[isp]),multinom_logL,X=matrix(DM.hab[[isp]][Mapping,],length(Mapping),ncol(DM.hab[[isp]])),C=G.transect[isp,],p=Area.trans*Area.hab[Mapping])$par
       #solve(crossprod(DM.hab[[isp]][Mapping,]),t(DM.hab[[isp]][Mapping,]))%*%log(G.transect[isp,]/Area.trans+.1)
   }
   Par=list(G.tot=G.tot,hab=hab,Eta=matrix(rnorm(n.species*n.cells),n.species,n.cells),
            tau.eta=runif(n.species,0.5,2),tau.eps=runif(n.species,0.5,2))
   Par$G=matrix(0,n.species,n.cells)
   for(isp in 1:n.species){
-    Pi=exp(DM.hab[[isp]]%*%hab[isp,])*Area.hab
+    Pi=exp(DM.hab[[isp]]%*%hab[isp,1:N.hab.par[isp]])*Area.hab
     for(it in 1:t.steps)Par$G[isp,]=rmultinom(1,G.tot[isp],Pi[((it-1)*S+1):((it-1)*S+S)])
   }
   I.error=(G.transect>Par$G[Mapping])
@@ -326,8 +326,11 @@ d_biv_normal<-function(Tmp.vec,XY,Sigma){
 }
   
 
-plot_N_map<-function(cur.t,N,Grid,highlight=NULL){
+plot_N_map<-function(cur.t,N,Grid,highlight=NULL,leg.title="Abundance"){
   require(rgeos)
+  require(ggplot2)
+  library(RColorBrewer)
+  myPalette <- colorRampPalette(rev(brewer.pal(11, "Spectral")))
   Tmp=Grid[[1]]
   if(is.null(highlight)==FALSE){
     midpoints=data.frame(gCentroid(Tmp[highlight,],byid=TRUE))
@@ -339,7 +342,7 @@ plot_N_map<-function(cur.t,N,Grid,highlight=NULL){
   new.colnames[1:2]=c("Easting","Northing")
   colnames(Cur.df)=new.colnames
   tmp.theme=theme(axis.ticks = element_blank(), axis.text = element_blank())
-  p1=ggplot(Cur.df)+aes(Easting,Northing,fill=Abundance)+geom_raster()+tmp.theme
+  p1=ggplot(Cur.df)+aes(Easting,Northing,fill=Abundance)+geom_raster()+tmp.theme+scale_fill_gradientn(colours=myPalette(100),name=leg.title)
   if(is.null(highlight)==FALSE){
     #p1=p1+geom_rect(data=midpoints,size=0.5,fill=NA,colour="yellow",aes(xmin=Easting-25067,xmax=Easting,ymin=Northing,ymax=Northing+25067))
     p1=p1+geom_rect(data=midpoints,size=0.5,fill=NA,colour="yellow",aes(xmin=Easting-25067/2,xmax=Easting+25067/2,ymin=Northing-25067/2,ymax=Northing+25067/2))
@@ -375,3 +378,40 @@ d_logP_omega<-function(Omega,Counts,Mu,tau,G.sum,Cur.thin){
 #' @keywords species classification
 #' @author Paul B. Conn
 sample_species<-function(probs,n.species)sample(c(1:n.species),1,prob=probs)
+
+#' function to concatenate posterior predictions from multiple files
+#' @param fname Char string providing base file name (no extension)
+#' @param n.files Number of files (naming convention is fname#.RData)
+#' @return Merged list object with posterior predictions
+#' @export
+#' @author Paul B. Conn
+cat_preds<-function(fname,n.files){
+  load(paste0(fname,"1",".RData"))
+  Dim=dim(Post$N)
+  Tmp=array(0,dim=c(Dim[1],Dim[2]*n.files,Dim[3]))
+  Tmp[,1:Dim[2],]=Post$N
+  if(n.files>1){
+    for(ifile in 2:n.files){
+      load(paste0(fname,ifile,".RData"))
+      Tmp[,(Dim[2]*(ifile-1)+1):(Dim[2]*ifile),]=Post$N
+    }
+  }
+  Tmp
+}
+
+#' function to calculate and plot goodness-of-fit for areal spatio-temporal abundance models
+#' @param Pred.counts An (n.mcmc.iter X n.transects X n.obs.types) array giving predicted counts in each surveyed grid cell (the GOF.counts object)
+#' @param Obs.counts A matrix giving actual counts observed in same set of transects (n.transects X n.obs.types)
+#' @param Mapping An (n.transects X 2) data.frame or matrix.  Rows index surveyed grid cells, with 1st column specifying the particular survey unit that was sampled, and the 2nd column specifying the time step (e.g. day) it was sampled
+#' @return GOF A list object that includes GOF plots and summary statistics
+#' @export
+#' @author Paul B. Conn
+conduct_GOF<-function(Pred.counts,Obs.counts,Mapping){
+  #zero-inflation
+  
+  #omnibus (norm)
+  
+  #
+}
+
+

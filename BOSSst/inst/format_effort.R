@@ -170,7 +170,7 @@ for(i in 1:nrow(Length.df)){
   }
 }
 Which.missing=which(is.na(Length.df[,"Day"]))  #grid/time combos missing hour, day, altitude
-if(length(Which.missing>0)){
+if(length(Which.missing)>0){
   for(i in 1:length(Which.missing)){ #for these few missing values, simply input mean values from flight
     Which.points=which(Points@data[,"flightid"]==Tracks@data[Row.index[i],"flightid"])
     Length.df[Which.missing[i],"Day"]=mean(Day[Which.points])
@@ -253,7 +253,12 @@ Count.data[,"Group"]=Hotspots@data[,"numseals"]
 Count.data[which(Count.data[,"Obs"]==14),"Group"]=1  #change group size to 1 for unknowns
     
 
-Effort=list(Mapping=Mapping,Area.trans=Area.trans,Area.hab=Area.hab,Count.data=Count.data)
+Effort=list(Mapping=Mapping,Area.trans=Area.trans,Area.hab=Area.hab,Count.data=Count.data,Meta=list(date.start="4/10/2012",date.end="5/8/2012"))
 save(Effort,file="c:/users/paul.conn/git/BOSSst/Effort2012_BOSSst_5Sep2014.Rdata")
 
+
+#Sampled=matrix(rep(0,1299),ncol=1)
+#Cur.cells=Mapping[which(Mapping[,2]==11),1]
+#Sampled[Cur.cells]=1
+#plot_N_map(1,Sampled,Grid=Data$Grid)
 
