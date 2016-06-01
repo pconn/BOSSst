@@ -14,7 +14,7 @@
 #' @param Mapping  A two column matrix where the first column gives the cell id number for each transect and the second gives the time step where observation was made
 #' @param Area.trans	A vector giving the effective area covered by each transect as fraction of total area in the strata it is located
 #' @param DayHour A (n.transect X 2) matrix providing row and column entries into the Thin array. Each row corresponds to an entry in Mapping
-#' @param Thin An (n.species X n.days X n.hours X n.iter) array providing n.iter posterior samples of the thinning parameters
+#' @param Thin An (n.species X n.transects X n.iter) array providing n.iter posterior samples of the thinning parameters
 #' @param Prop.photo A vector giving the proportion of of the area sampled in each transect that is photographed (still needed for GOF??)
 #' @param n.species An integer giving the true number of species
 #' @param n.obs.cov	Number of observer covariates (e.g., visibility, etc.)
@@ -38,7 +38,7 @@
 #' @param Cov.prior.n  An (# species X # indiv. covariates) matrix giving the number of parameters in each covariate pdf
 #' @param spat.ind	If TRUE, assumes spatial independence (no spatial random effects on abundance intensity) default is FALSE
 #' @param Psi An array holding posterior samples of the confusion matrix (dim = #species,#obs,#mcmc.iter)
-#' @param Thin An array holding posterior samples of thinning probabilities (dim = # species, # days surveyed, # hours in day, #iterations)
+#' @param Thin An array holding posterior samples of thinning probabilities (dim = # species, # transects #iterations)
 #' @param DayHour A matrix indicating which element of Thin each surveyed cell belongs to
 #' @param grps 	If FALSE, detections are assumed to all be of individual animals
 #' @param Control	A list object including the following objects:

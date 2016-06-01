@@ -91,7 +91,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 	#require(truncnorm)
   n.ST=Meta$S*Meta$t.steps
  	Lam.index=c(1:n.ST)
-  thin.pl=sample(c(1:dim(Meta$Thin)[4]),1)
+  thin.pl=sample(c(1:dim(Meta$Thin)[3]),1)
 	grp.pl=NULL
 	if(Meta$grps==TRUE)grp.pl=which(colnames(Dat)=="Group")
   if(is.null(Control$species.optim))Control$species.optim=TRUE
@@ -118,9 +118,11 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
   n.unique=length(Sampled) 
 
   #declare index, function for accessing thinning probabilities for specific transects
-  Thin.pl=Meta$t.steps*(Meta$DayHour[,2]-1)+Meta$DayHour[,1]
+  #Thin.pl=Meta$t.steps*(Meta$DayHour[,2]-1)+Meta$DayHour[,1]
+  Thin.pl=c(1:Meta$n.transects)
  	get_thin<-function(Thin,Thin.pl,sp,iter){
- 	  Tmp.thin=Thin[sp,,,iter][Thin.pl]
+ 	  #Tmp.thin=Thin[sp,,,iter][Thin.pl]
+ 	  Tmp.thin=Thin[sp,,iter][Thin.pl]
  	  Tmp.thin
  	} 
   Thin.vec=rep(0,n.ST)  #needed in G, N updates
@@ -228,12 +230,12 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
    
   #setup process conv/RW2 space-time model
   n.knots=ncol(Meta$K)
-  K=matrix(0,S*t.steps,n.knots*t.steps)
+  K=matrix(0,S*Meta$t.steps,n.knots*Meta$t.steps)
   #rearrage K to grab right elements of alpha
   cur.row=0
-  for(it in 1:t.steps){
+  for(it in 1:Meta$t.steps){
     for(iknot in 1:n.knots){
-      K[(cur.row+1):(cur.row+S),(iknot-1)*t.steps+it]=Meta$K[,iknot]
+      K[(cur.row+1):(cur.row+S),(iknot-1)*Meta$t.steps+it]=Meta$K[,iknot]
     }
     cur.row=cur.row+S
   }
@@ -252,10 +254,10 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
   K.t=t(K)
   cross.K<-crossprod(K,K)
   Diag=diag(nrow(cross.K))*0.001
-  X.rw2=matrix(0,n.knots*t.steps,2*n.knots)
+  X.rw2=matrix(0,n.knots*Meta$t.steps,2*n.knots)
   for(iknot in 1:n.knots){
-    X.rw2[((iknot-1)*t.steps+1):((iknot-1)*t.steps+t.steps),iknot]=1
-    X.rw2[((iknot-1)*t.steps+1):((iknot-1)*t.steps+t.steps),n.knots+iknot]=c(1:t.steps)
+    X.rw2[((iknot-1)*Meta$t.steps+1):((iknot-1)*Meta$t.steps+Meta$t.steps),iknot]=1
+    X.rw2[((iknot-1)*Meta$t.steps+1):((iknot-1)*Meta$t.steps+Meta$t.steps),n.knots+iknot]=c(1:Meta$t.steps)
   }
   X.rw2.t=t(X.rw2)
   A=solve(crossprod(X.rw2),X.rw2.t) #for conditioning by kriging
@@ -267,11 +269,11 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
   Beta.rw2=matrix(0,Meta$n.species,ncol(X.rw2))
 
   #summary statistics to quantify number of counts made in each time step
-  Control$MH.omega=matrix(0,Meta$n.species,t.steps)
-  Nt.obs=rep(0,t.steps)
-  Time.indices=matrix(0,t.steps,2) #beginning and ending entries of cells visited for each time step
+  Control$MH.omega=matrix(0,Meta$n.species,Meta$t.steps)
+  Nt.obs=rep(0,Meta$t.steps)
+  Time.indices=matrix(0,Meta$t.steps,2) #beginning and ending entries of cells visited for each time step
   cur.pl=1
-  for(it in 1:t.steps){
+  for(it in 1:Meta$t.steps){
     Nt.obs[it]=sum(Meta$CellTime[,2]==it)
     Time.indices[it,1]=cur.pl
     Time.indices[it,2]=(cur.pl+Nt.obs[it]-1)
@@ -284,7 +286,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
   for(isp in 1:Meta$n.species){
     Omega.pred=DM.hab.sampled[[isp]]%*%Par$hab[isp,1:Meta$N.hab.par[isp]]+Par$Eta[isp,Sampled]+Log.area.adjust[Sampled]
     Cur.thin=get_thin(Meta$Thin,Thin.pl,isp,thin.pl)*Meta$Area.trans
-    for(it in 1:t.steps){
+    for(it in 1:Meta$t.steps){
       if(Nt.obs[it]>0){
         Omega.list[[isp]][[it]]=Par$Omega[isp,Sampled[which(Meta$CellTime[,2]==it)]] #define only for observed
         Pi.list[[isp]][[it]]=Pi.obs.stnd[[isp]][Time.indices[it,1]:Time.indices[it,2],it] 
@@ -300,6 +302,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
   
   Obs.det=NA
   Pred.det=NA
+  GOF.counts=NULL
   if(Control$GOF){ #note: some of these are hard wired for BOSS data
     GOF.counts=array(0,dim=c(mcmc.length,Meta$n.transects,n.obs.types+1))
   }
@@ -380,7 +383,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 			#simulate omega for unobserved times and places
 			Par$Omega[isp,-Sampled]=rnorm(n.ST-n.unique,DM.hab.unsampled[[isp]]%*%Par$hab[isp,1:Meta$N.hab.par[isp]]+Par$Eta[isp,-Sampled]+Log.area.adjust[-Sampled],sd)
 			if(is.null(Omega.true)){
-			  for(it in 1:t.steps){
+			  for(it in 1:Meta$t.steps){
 			    if(Nt.obs[it]>0){
             Prop=rmvnorm(1,Omega.list[[isp]][[it]],Control$MH.omega[isp,it]*Prop.Sigma[[isp]][[it]])
 			      Prop.exp=exp(Prop)
@@ -420,7 +423,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 			}	
       cur.j=iiter%%100
       if(cur.j==0)cur.j=100
-      for(it in 1:t.steps){
+      for(it in 1:Meta$t.steps){
         if(Nt.obs[it]>0)Omega.current[[isp]][[it]][,cur.j]=as.vector(Omega.list[[isp]][[it]])
       }
       
@@ -576,7 +579,8 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
     ##### update thinning parameters in independence chain
     old.post=0
     new.post=0
-    new.ind=round(runif(1,0.5,dim(Thin)[4]+0.5))
+    #new.ind=round(runif(1,0.5,dim(Thin)[4]+0.5))
+    new.ind=round(runif(1,0.5,dim(Thin)[3]+0.5))
     for(isp in 1:Meta$n.species){
 		  #G.sampled=rep(0,n.unique) #total number of groups currently in each sampled strata
 		  #for(i in 1:Meta$n.transects)G.sampled[Sampled==Meta$Mapping[i]]=G.sampled[Sampled==Meta$Mapping[i]]+Meta$G.transect[isp,i]
@@ -674,7 +678,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
       #adapt Omega proposal covariance matrix using Alg 2 of Shaby and Wells (2010)
       R=(Accept$Omega-Old.accept.omega)/100
       for(isp in 1:Meta$n.species){
-        for(it in 1:t.steps){
+        for(it in 1:Meta$t.steps){
           if(Nt.obs[it]>0){
             #Omega.mean=rowMeans(Omega.current[[isp]][[it]])
             #Sample.Cov=1/99*crossprod(Omega.current[[isp]][[it]]-Omega.mean)

@@ -1,0 +1,360 @@
+This is pdfTeX, Version 3.1415926-2.5-1.40.14 (MiKTeX 2.9) (preloaded format=pdflatex 2014.6.23)  1 JUN 2016 15:06
+entering extended mode
+**effort_BOSSst.tex
+(C:\Users\paul.conn\git\BOSSst\effort_writeup\effort_BOSSst.tex
+LaTeX2e <2011/06/27>
+Babel <v3.8m> and hyphenation patterns for english, afrikaans, ancientgreek, ar
+abic, armenian, assamese, basque, bengali, bokmal, bulgarian, catalan, coptic, 
+croatian, czech, danish, dutch, esperanto, estonian, farsi, finnish, french, ga
+lician, german, german-x-2013-05-26, greek, gujarati, hindi, hungarian, iceland
+ic, indonesian, interlingua, irish, italian, kannada, kurmanji, latin, latvian,
+ lithuanian, malayalam, marathi, mongolian, mongolianlmc, monogreek, ngerman, n
+german-x-2013-05-26, nynorsk, oriya, panjabi, pinyin, polish, portuguese, roman
+ian, russian, sanskrit, serbian, slovak, slovenian, spanish, swedish, swissgerm
+an, tamil, telugu, turkish, turkmen, ukenglish, ukrainian, uppersorbian, usengl
+ishmax, welsh, loaded.
+("C:\Program Files (x86)\MiKTeX 2.9\tex\latex\base\article.cls"
+Document Class: article 2007/10/19 v1.4h Standard LaTeX document class
+("C:\Program Files (x86)\MiKTeX 2.9\tex\latex\base\size10.clo"
+File: size10.clo 2007/10/19 v1.4h Standard LaTeX file (size option)
+)
+\c@part=\count79
+\c@section=\count80
+\c@subsection=\count81
+\c@subsubsection=\count82
+\c@paragraph=\count83
+\c@subparagraph=\count84
+\c@figure=\count85
+\c@table=\count86
+\abovecaptionskip=\skip41
+\belowcaptionskip=\skip42
+\bibindent=\dimen102
+)
+("C:\Program Files (x86)\MiKTeX 2.9\tex\latex\graphics\graphicx.sty"
+Package: graphicx 1999/02/16 v1.0f Enhanced LaTeX Graphics (DPC,SPQR)
+
+("C:\Program Files (x86)\MiKTeX 2.9\tex\latex\graphics\keyval.sty"
+Package: keyval 1999/03/16 v1.13 key=value parser (DPC)
+\KV@toks@=\toks14
+)
+("C:\Program Files (x86)\MiKTeX 2.9\tex\latex\graphics\graphics.sty"
+Package: graphics 2009/02/05 v1.0o Standard LaTeX Graphics (DPC,SPQR)
+
+("C:\Program Files (x86)\MiKTeX 2.9\tex\latex\graphics\trig.sty"
+Package: trig 1999/03/16 v1.09 sin cos tan (DPC)
+)
+("C:\Program Files (x86)\MiKTeX 2.9\tex\latex\00miktex\graphics.cfg"
+File: graphics.cfg 2007/01/18 v1.5 graphics configuration of teTeX/TeXLive
+)
+Package graphics Info: Driver file: pdftex.def on input line 91.
+
+("C:\Program Files (x86)\MiKTeX 2.9\tex\latex\pdftex-def\pdftex.def"
+File: pdftex.def 2011/05/27 v0.06d Graphics/color for pdfTeX
+
+("C:\Program Files (x86)\MiKTeX 2.9\tex\generic\oberdiek\infwarerr.sty"
+Package: infwarerr 2010/04/08 v1.3 Providing info/warning/error messages (HO)
+)
+("C:\Program Files (x86)\MiKTeX 2.9\tex\generic\oberdiek\ltxcmds.sty"
+Package: ltxcmds 2011/11/09 v1.22 LaTeX kernel commands for general use (HO)
+)
+\Gread@gobject=\count87
+))
+\Gin@req@height=\dimen103
+\Gin@req@width=\dimen104
+)
+("C:\Program Files (x86)\MiKTeX 2.9\tex\latex\graphics\color.sty"
+Package: color 2005/11/14 v1.0j Standard LaTeX Color (DPC)
+
+("C:\Program Files (x86)\MiKTeX 2.9\tex\latex\00miktex\color.cfg"
+File: color.cfg 2007/01/18 v1.5 color configuration of teTeX/TeXLive
+)
+Package color Info: Driver file: pdftex.def on input line 130.
+)
+("\\AKC0SS-N086\NMML_Users\paul.conn\Application Data\MiKTeX\2.9\tex\latex\fram
+ed\framed.sty"
+Package: framed 2011/10/22 v 0.96: framed or shaded text with page breaks
+\OuterFrameSep=\skip43
+\fb@frw=\dimen105
+\fb@frh=\dimen106
+\FrameRule=\dimen107
+\FrameSep=\dimen108
+) ("C:\Program Files (x86)\MiKTeX 2.9\tex\latex\base\alltt.sty"
+Package: alltt 1997/06/16 v2.0g defines alltt environment
+)
+("C:\Program Files (x86)\MiKTeX 2.9\tex\latex\tools\verbatim.sty"
+Package: verbatim 2003/08/22 v1.5q LaTeX2e package for verbatim enhancements
+\every@verbatim=\toks15
+\verbatim@line=\toks16
+\verbatim@in@stream=\read1
+)
+("\\AKC0SS-N086\NMML_Users\paul.conn\Application Data\MiKTeX\2.9\tex\latex\upqu
+ote\upquote.sty"
+Package: upquote 2012/04/19 v1.3 upright-quote and grave-accent glyphs in verba
+tim
+)
+(C:\Users\paul.conn\git\BOSSst\effort_writeup\effort_BOSSst.aux)
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 53.
+LaTeX Font Info:    ... okay on input line 53.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 53.
+LaTeX Font Info:    ... okay on input line 53.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 53.
+LaTeX Font Info:    ... okay on input line 53.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 53.
+LaTeX Font Info:    ... okay on input line 53.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 53.
+LaTeX Font Info:    ... okay on input line 53.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 53.
+LaTeX Font Info:    ... okay on input line 53.
+
+("\\AKC0SS-N086\NMML_Users\paul.conn\Application Data\MiKTeX\2.9\tex\context\ba
+se\supp-pdf.mkii"
+[Loading MPS to PDF converter (version 2006.09.02).]
+\scratchcounter=\count88
+\scratchdimen=\dimen109
+\scratchbox=\box26
+\nofMPsegments=\count89
+\nofMParguments=\count90
+\everyMPshowfont=\toks17
+\MPscratchCnt=\count91
+\MPscratchDim=\dimen110
+\MPnumerator=\count92
+\makeMPintoPDFobject=\count93
+\everyMPtoPDFconversion=\toks18
+)
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <12> on input line 58.
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <8> on input line 58.
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <6> on input line 58.
+
+
+LaTeX Warning: No \author given.
+
+
+Overfull \hbox (0.7756pt too wide) in paragraph at lines 62--64
+[]\OT1/cmr/m/n/10 Formulation of ef-fort in []\OT1/cmtt/m/n/10 Calculate_area_s
+urveyed_crawl.R \OT1/cmr/m/n/10 be-gins by load-
+ []
+
+[1
+
+{C:/Users/paul.conn/AppData/Local/MiKTeX/2.9/pdftex/config/pdftex.map}]
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <7> on input line 70.
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <5> on input line 70.
+
+! Undefined control sequence.
+<recently read> \abs 
+                     
+l.70 ...occurring during intervals for which $\abs
+                                                  {Delta_i}>0.01$ for 10 suc...
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+
+Overfull \hbox (72.24774pt too wide) in paragraph at lines 71--72
+[]\OT1/cmr/m/n/10 Using sev-eral func-tions []\OT1/cmtt/m/n/10 get_footprint_co
+rners_port\OT1/cmr/m/n/10 , []\OT1/cmtt/m/n/10 get_footprint_corners_center\OT1
+/cmr/m/n/10 ,
+ []
+
+Package color Info: Redefining color shadecolor on input line 78.
+[2]
+LaTeX Font Info:    Font shape `OT1/cmtt/bx/n' in size <10> not available
+(Font)              Font shape `OT1/cmtt/m/n' tried instead on input line 80.
+
+Overfull \hbox (38.24666pt too wide) in paragraph at lines 90--90
+\OT1/cmtt/m/it/10 ##  Type 'demo(package='crawl')' to see a list of demos for t
+his package. 
+ []
+
+
+Overfull \hbox (43.49661pt too wide) in paragraph at lines 90--90
+\OT1/cmtt/m/it/10 ##  The raw code for the demos can be found by typing 'system
+.file('demo',
+ []
+
+
+Overfull \hbox (22.4968pt too wide) in paragraph at lines 95--95
+[][]\OT1/cmtt/m/n/10 Which_photos[] []=[] []which[][](FlightCellSide_ID[][]==[]
+[]FlightCellSide_unique_IDs[[][]11[][]])[][] 
+ []
+
+<figure/graphics-Bchunk1-1.png, id=17, 867.24pt x 867.24pt>
+File: figure/graphics-Bchunk1-1.png Graphic file (type png)
+
+<use figure/graphics-Bchunk1-1.png>
+Package pdftex.def Info: figure/graphics-Bchunk1-1.png used on input line 100.
+(pdftex.def)             Requested size: 345.0pt x 344.99754pt.
+ [3]
+Package color Info: Redefining color shadecolor on input line 112.
+
+<figure/graphics-Bchunk2-1.png, id=22, 867.24pt x 867.24pt>
+File: figure/graphics-Bchunk2-1.png Graphic file (type png)
+
+<use figure/graphics-Bchunk2-1.png>
+Package pdftex.def Info: figure/graphics-Bchunk2-1.png used on input line 118.
+(pdftex.def)             Requested size: 345.0pt x 344.99754pt.
+ [4 <C:/Users/paul.conn/git/BOSSst/effort_writeup/figure/graphics-Bchunk1-1.png
+>]
+Package color Info: Redefining color shadecolor on input line 129.
+
+Overfull \hbox (227.24501pt too wide) in paragraph at lines 133--133
+[]    []\OT1/cmtt/m/n/10 I_dup[] []=[] [](Coords[[][]2[][]:[][]n_photos,[][]1[]
+[]][][]==[][]Coords[[][]1[][]:[][](n_photos[][]-[][]1[][]),[][]1[][]][] []&[] [
+]Coords[[][]2[][]:[][]n_photos,[][]2[][]][][]==[][]Coords[[][]1[][]:[][](n_phot
+os[][]-[][]1[][]),[][]2[][]])[][] 
+ []
+
+
+Overfull \hbox (332.2441pt too wide) in paragraph at lines 135--135
+[]    []\OT1/cmtt/m/n/10 Cur_df[][]=[][]data.frame[][]([][]img_dt[][]=[][]as.nu
+meric[][]([][]difftime[][](boss_geo[Which_photos,][][]$[][]img_dt,boss_geo[Whic
+h_photos[[][]1[][]],][][]$[][]img_dt,[][]units[][]=[][]"secs"[][])))[][] 
+ []
+
+
+Overfull \hbox (269.24464pt too wide) in paragraph at lines 141--141
+[]    []\OT1/cmtt/m/n/10 Inits[] []=[] []list[][]([][]a1.x[] []=[] []c[][](Coor
+ds[[][]1[][],[][]1[][]],[][]0[][]),[] []a1.y[] []=[][]c[][](Coords[[][]1[][],[]
+[]2[][]],[][]0[][]),[][]P1.x[][]=[][]diag[][]([][]c[][]([][]10000[][],[][]10000
+[][])),[][]P1.y[][]=[][]diag[][]([][]c[][]([][]10000[][],[][]10000[][])))[][] 
+ []
+
+
+Overfull \hbox (557.99213pt too wide) in paragraph at lines 144--144
+[]   []\OT1/cmtt/m/n/10 my_fit[] []<-[] []crwMLE[][]([][]mov.model[][]=[][]~[][
+]1[][],[][]err.model[][]=[][]list[][]([][]x[][]=[][]~[][]1[][],[][]y[][]=[][]~[
+][]1[][]),[][]data[][]=Cur_df,[][]coord[][]=[][]c[][]([][]"x"[][],[][]"y"[][]),
+[][]Time.name[][]=[][]"img_dt"[][],[][]need.hess[][]=[][]FALSE[][],[][]initial.
+state[][]=Inits,[][]polar.coord[][]=[][]FALSE[][],[][]fixPar[][]=Fix)[][] 
+ []
+
+LaTeX Font Info:    Try loading font information for OMS+cmtt on input line 151
+.
+(C:/PROGRA~1/RRO/R-32~1.2/share/texmf/tex/latex\omscmtt.fd
+File: omscmtt.fd 
+)
+LaTeX Font Info:    Font shape `OMS/cmtt/m/n' in size <10> not available
+(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 151.
+
+Overfull \hbox (573.74199pt too wide) in paragraph at lines 153--153
+[]      []\OT1/cmtt/m/n/10 my_fit[] []<-[] []crwMLE[][]([][]mov.model[][]=[][]~
+[][]1[][],[][]err.model[][]=[][]list[][]([][]x[][]=[][]~[][]1[][],[][]y[][]=[][
+]~[][]1[][]),[][]data[][]=Cur_df,[][]coord[][]=[][]c[][]([][]"x"[][],[][]"y"[][
+]),[][]Time.name[][]=[][]"img_dt"[][],[][]need.hess[][]=[][]FALSE[][],[][]initi
+al.state[][]=Inits,[][]polar.coord[][]=[][]FALSE[][],[][]fixPar[][]=Fix)[][] 
+ []
+
+
+Overfull \hbox (11.99689pt too wide) in paragraph at lines 157--157
+[]    []\OT1/cmtt/m/n/10 predTime[][]=[][]as.numeric[][](Cur_df[[][]1[][],[][]"
+img_dt"[][]][][]+[][]c[][]([][]0[][]:[][](n_photos[][]-[][]1[][]))[][]*[][]t_di
+ff)[][] 
+ []
+
+
+Overfull \hbox (85.49625pt too wide) in paragraph at lines 160--160
+[]    []\OT1/cmtt/m/n/10 Interp_loc[Which_photos,][][]=[][]cbind[][](Preds[][]$
+[][]mu.x[Which_pred],Preds[][]$[][]mu.y[Which_pred])[][] 
+ []
+
+
+Overfull \hbox (38.24666pt too wide) in paragraph at lines 162--162
+[]  []\OT1/cmtt/m/n/10 laea_180_proj[] []<-[] []paste[][]([][]"+proj=laea +lat_
+0=90 +lon_0=180 +x_0=0 +y_0=0"[][],[][] 
+ []
+
+
+Overfull \hbox (95.99615pt too wide) in paragraph at lines 163--163
+[]                       []\OT1/cmtt/m/n/10 "+datum=WGS84 +units=m +no_defs +el
+lps=WGS84 +towgs84=0,0,0"[][])[][] 
+ []
+
+
+Overfull \hbox (164.24556pt too wide) in paragraph at lines 164--164
+[][]\OT1/cmtt/m/n/10 boss_geo[][]=[][]SpatialPointsDataFrame[][]([][]coords[][]
+=Interp_loc,[][]data[][]=boss_geo[][]@[][]data[][],[][]proj4str[][]=[][]CRS[][]
+(laea_180_proj))[][] 
+ []
+
+
+Overfull \vbox (0.9642pt too high) detected at line 167
+ []
+
+[5 <C:/Users/paul.conn/git/BOSSst/effort_writeup/figure/graphics-Bchunk2-1.png>
+] <figure/graphics-Bchunk3-1.png, id=31, 867.24pt x 867.24pt>
+File: figure/graphics-Bchunk3-1.png Graphic file (type png)
+
+<use figure/graphics-Bchunk3-1.png>
+Package pdftex.def Info: figure/graphics-Bchunk3-1.png used on input line 169.
+(pdftex.def)             Requested size: 345.0pt x 344.99754pt.
+ [6]
+Package color Info: Redefining color shadecolor on input line 180.
+
+Overfull \hbox (174.74547pt too wide) in paragraph at lines 184--184
+[][]\OT1/cmtt/m/n/10 Which_photos[][]=[][]which[][](boss_geo[][]$[][]flightid[]
+[]==[][]"12_AeroFl01"[] []&[] []boss_geo[][]$[][]side[][]==[][]"Port"[] []&[] [
+]boss_geo[][]$[][]GridID[][]==[][]701[][])[][] 
+ []
+
+<figure/graphics-Bchunk5-1.png, id=35, 867.24pt x 867.24pt>
+File: figure/graphics-Bchunk5-1.png Graphic file (type png)
+
+<use figure/graphics-Bchunk5-1.png>
+Package pdftex.def Info: figure/graphics-Bchunk5-1.png used on input line 189.
+(pdftex.def)             Requested size: 345.0pt x 344.99754pt.
+ [7 <C:/Users/paul.conn/git/BOSSst/effort_writeup/figure/graphics-Bchunk3-1.png
+>]
+Package color Info: Redefining color shadecolor on input line 201.
+
+<figure/graphics-Bchunk6-1.png, id=41, 867.24pt x 867.24pt>
+File: figure/graphics-Bchunk6-1.png Graphic file (type png)
+
+<use figure/graphics-Bchunk6-1.png>
+Package pdftex.def Info: figure/graphics-Bchunk6-1.png used on input line 209.
+(pdftex.def)             Requested size: 345.0pt x 344.99754pt.
+ [8 <C:/Users/paul.conn/git/BOSSst/effort_writeup/figure/graphics-Bchunk5-1.png
+>]
+Package color Info: Redefining color shadecolor on input line 220.
+
+<figure/graphics-Bchunk7-1.png, id=46, 867.24pt x 867.24pt>
+File: figure/graphics-Bchunk7-1.png Graphic file (type png)
+
+<use figure/graphics-Bchunk7-1.png>
+Package pdftex.def Info: figure/graphics-Bchunk7-1.png used on input line 226.
+(pdftex.def)             Requested size: 345.0pt x 344.99754pt.
+ [9 <C:/Users/paul.conn/git/BOSSst/effort_writeup/figure/graphics-Bchunk6-1.png
+>] [10 <C:/Users/paul.conn/git/BOSSst/effort_writeup/figure/graphics-Bchunk7-1.
+png>]
+(C:\Users\paul.conn\git\BOSSst\effort_writeup\effort_BOSSst.aux) ) 
+Here is how much of TeX's memory you used:
+ 1347 strings out of 493921
+ 19295 string characters out of 3144804
+ 79953 words of memory out of 3000000
+ 4652 multiletter control sequences out of 15000+200000
+ 7011 words of font info for 26 fonts, out of 3000000 for 9000
+ 841 hyphenation exceptions out of 8191
+ 27i,6n,19p,1993b,286s stack positions out of 5000i,500n,10000p,200000b,50000s
+<C:/Program F
+iles (x86)/MiKTeX 2.9/fonts/type1/public/amsfonts/cm/cmitt10.pfb><C:/Program Fi
+les (x86)/MiKTeX 2.9/fonts/type1/public/amsfonts/cm/cmmi10.pfb><C:/Program File
+s (x86)/MiKTeX 2.9/fonts/type1/public/amsfonts/cm/cmmi7.pfb><C:/Program Files (
+x86)/MiKTeX 2.9/fonts/type1/public/amsfonts/cm/cmr10.pfb><C:/Program Files (x86
+)/MiKTeX 2.9/fonts/type1/public/amsfonts/cm/cmr12.pfb><C:/Program Files (x86)/M
+iKTeX 2.9/fonts/type1/public/amsfonts/cm/cmr17.pfb><C:/Program Files (x86)/MiKT
+eX 2.9/fonts/type1/public/amsfonts/cm/cmr7.pfb><C:/Program Files (x86)/MiKTeX 2
+.9/fonts/type1/public/amsfonts/cm/cmsy10.pfb><C:/Program Files (x86)/MiKTeX 2.9
+/fonts/type1/public/amsfonts/cm/cmsy7.pfb><C:/Program Files (x86)/MiKTeX 2.9/fo
+nts/type1/public/amsfonts/cm/cmtt10.pfb>
+Output written on effort_BOSSst.pdf (10 pages, 152682 bytes).
+PDF statistics:
+ 87 PDF objects out of 1000 (max. 8388607)
+ 0 named destinations out of 1000 (max. 500000)
+ 31 words of extra memory for PDF output out of 10000 (max. 10000000)
+

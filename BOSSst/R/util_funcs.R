@@ -399,6 +399,32 @@ cat_preds<-function(fname,n.files){
   Tmp
 }
 
+
+#' Produce an RW2 structure matrix for a line (e.g. for time series)
+#' @param x length of vector
+#' @return RW2 precision matrix
+#' @export 
+#' @keywords adjacency
+#' @author Paul Conn
+linear_adj_RW2 <- function(x){
+  Q=Matrix(0,x,x)
+  for(i in 1:(x-2)){
+    Q[i,i+2]=1
+    Q[i+2,i]=1
+  }
+  for(i in 1:(x-1)){
+    Q[i,i+1]=-4
+    Q[i+1,i]=-4
+  }
+  Q[1,2]=-2
+  Q[2,1]=-2
+  Q[x,x-1]=-2
+  Q[x-1,x]=-2
+  diag(Q)=-rowSums(Q)
+  Q
+}  
+
+
 #' function to calculate and plot goodness-of-fit for areal spatio-temporal abundance models
 #' @param Pred.counts An (n.mcmc.iter X n.transects X n.obs.types) array giving predicted counts in each surveyed grid cell (the GOF.counts object)
 #' @param Obs.counts A matrix giving actual counts observed in same set of transects (n.transects X n.obs.types)

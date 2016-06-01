@@ -129,6 +129,8 @@ for(iid in 1:length(FlightCellSide_unique_IDs)){
   }
 }
 
+save(boss_geo,FlightCellSide_ID,file='boss_geo_sp_tmp3b.Rda')
+
 #for each "leg", base plane x, y position for duplicated x,y coords based on flight track and frequency of camera firings
 FlightCellSide_unique_IDs = unique(FlightCellSide_ID) 
 Interp_loc = coordinates(boss_geo)
@@ -511,6 +513,7 @@ for(iid in 1:length(FlightCell_unique_IDs)){
     }
   }
   SPDF = SpatialPolygons(Polys,proj4string=CRS(laea_180_proj))  
+  if(iid==10)save(SPDF,file="12_AeroFl01_701_spdf.Rda")
   Union = gUnionCascaded(SPDF)
   Photo_area[iid]=gArea(Union)
 }  

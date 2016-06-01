@@ -20,6 +20,7 @@ cumulative area covered (thereby accounting for overlapping photographs).  This 
 /BOSSst/inst/Calculate_area_surveyed_crawl.R.  
 
 -Next, we format remaining data products and convert them into a form suitable for application of 
-MCMC estimation functions.  For 2012, this is done with /BOSSst/inst/format_Bering2012_all.R
+MCMC estimation functions.  For 2012, this is done with /BOSSst/inst/format_Bering2012_all.R.  Requisite
+data for hierarchical modeling is stored in "BOSS_data_2012.Rda"
 
 -Finally, we run models, using e.g. run_Bering2012_all.R

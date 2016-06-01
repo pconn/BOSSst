@@ -4,13 +4,14 @@ load('./data_from_JML/boss_hotspots_sp.Rda') #hotspots
 load('./data_from_JML/boss_grid_env.Rda') # effort summary (without area surveyed)
 #load('./data_from_JML/grid_spdf.rda') # BOSS Grid 
 load('./AlaskaBeringData2012_2013_14Dec2015.Rdat')
-load('./Area_photographed.rda')  #produced with 'Calculate_area_surveyed.R'
+load('./Area_photographed.rda')  #produced with 'Calculate_area_surveyed_crawl.R'
 load('BOSS_Flt_dates.Rda')
 load('Knot_cell_distances.Rdata') #load object giving K matrix, Q for knots
 load('p13.RData')  #read in confusion array
 load('Haulout_samples.Rdat')  #read in haulout proportion MCMC samples
 
-
+library(rgeos)
+library(sp)
 
 RANDOM_OBSERVER = TRUE  #if true, pick the species IDer randomly
 
@@ -20,20 +21,20 @@ laea_180_proj <- paste("+proj=laea +lat_0=90 +lon_0=180 +x_0=0 +y_0=0",
 #grid_spdf=spTransform(grid_spdf, CRS(laea_180_proj))
 boss_hotspots_sp=spTransform(boss_hotspots_sp, CRS(laea_180_proj))
 
-cur_fl="12_OtterFl10"
-crap=which(Area_table[,"flightid"]==cur_fl)
-length(unique(Area_table[crap,"Grid_ID"]))
-crap=which(boss_grid_env[,"flightid"]==cur_fl)
-length(crap)
+#cur_fl="12_OtterFl10"
+#crap=which(Area_table[,"flightid"]==cur_fl)
+#length(unique(Area_table[crap,"Grid_ID"]))
+#crap=which(boss_grid_env[,"flightid"]==cur_fl)
+#length(crap)
 
 
 # 2012: Run analysis for 4/10 - 5/8
 date.start=as.Date("2012-04-10")
 date.end=as.Date("2012-05-08")
-t.steps=as.numeric(date.end-date.start)
+t.steps=as.numeric(date.end-date.start)+1
 Data$Grid = Data$Grid$y2012
 Day_PST = as.numeric(as.Date(boss_grid_env[,"grid_dt"],tz="PST8PDT")-date.start)
-Which_dates = which(Day_PST>=0 & Day_PST<=t.steps)
+Which_dates = which(Day_PST>=0 & Day_PST<t.steps)
 boss_grid_env=boss_grid_env[Which_dates,]
 Day_PST=Day_PST[Which_dates]
 Area_table[,"flightid"]=as.character(Area_table[,"flightid"])
@@ -60,6 +61,42 @@ if(length(Which_remove)>0){
   boss_grid_env=boss_grid_env[-Which_remove,]
   Day_PST = Day_PST[-Which_remove]
 }
+
+comb_row <- function(Rows){
+  New_row=Rows[1,1:(length(Rows)-1)]
+  New_row["grid_dt"]=mean(Rows[,"grid_dt"])
+  New_row[c("narr_air2m","narr_prmsl","narr_uwnd","narr_vwnd")]=apply(Rows[,c("narr_air2m","narr_prmsl","narr_uwnd","narr_vwnd")],2,'mean')
+  New_row[c("img_count_port","img_count_center","img_count_starboard")]=apply(Rows[,c("img_count_port","img_count_center","img_count_starboard")],2,'sum')
+  Tmp=Rows$seal_id_array[[1]]
+  for(irow in 2:nrow(Rows))Tmp=rbind(Tmp,Rows$seal_id_array[[irow]])
+  New_row$seal_id_array=vector("list",1)
+  New_row$seal_id_array[[1]]=Tmp
+  New_row
+}
+
+#combine data for cells sampled >1 time in a given day
+Day_Cell=paste(Day_PST,boss_grid_env[,"objectid"])
+Duplicated=which(duplicated(Day_Cell))
+cur_pl=1
+Firsts=Firsts_area=Duplicated_area=rep(0,length(Duplicated))
+Area_table$Grid_ID = as.numeric(as.character(Area_table$Grid_ID))
+Replace=boss_grid_env[1:length(Duplicated),]
+Replace_area=rep(0,length(Duplicated))
+for(i in 1:length(Duplicated)){
+  Firsts[i]=which(Day_Cell==Day_Cell[Duplicated[i]])[1]
+  Replace[i,]=comb_row(rbind(boss_grid_env[Firsts[i],],boss_grid_env[Duplicated[i],]))
+  Firsts_area[i] = which(Area_table$Grid_ID==boss_grid_env[Firsts[i],"objectid"] & Area_table$flightid==boss_grid_env[Firsts[i],"flightid"])
+  Duplicated_area[i] = which(Area_table$Grid_ID==boss_grid_env[Duplicated[i],"objectid"] & Area_table$flightid==boss_grid_env[Duplicated[i],"flightid"])
+}
+
+boss_grid_env=boss_grid_env[-Duplicated,]
+Row_index = Firsts - c(0:(length(Firsts)-1))
+boss_grid_env[Row_index,]=Replace
+#ONLY WORKS BECAUSE DUPLICATED ALL OCCUR AFTER FIRSTS in Area_table
+Area_table[Firsts_area,"Area_m2"]=Area_table[Firsts_area,"Area_m2"]+Area_table[Duplicated_area,"Area_m2"]  
+Area_table=Area_table[-Duplicated_area,]
+Day_PST = Day_PST[-Duplicated]
+
 n_surveyed=nrow(boss_grid_env)
 
 #Produce Day, Hour in UTC for haulout predictions
@@ -138,8 +175,10 @@ for(i in 1:length(Unique_IDs)){
 
 #construct count data set
 #Obs_mat2=Obs_mat2[-2364,]  #no seal in image
-Obs_mat2[2872,"species"]="sd"  #species missing ; HS 1551 was actually spotted
-Obs_mat2[2872,"species_conf"]="likely"
+which_1551 = which(Obs_mat2[,"hotspotid"]==1551)
+Obs_mat2[which_1551,"species"]="sd"  #species missing ; HS 1551 was actually spotted
+Obs_mat2[which_1551,"species_conf"]="likely"
+Obs_mat2[which(Obs_mat2[,"hotspotid"]==23516),"numseals"]=1
 Count_data_BOSS = data.frame(matrix(1,nrow(Obs_mat2),4)) 
 Count_data_BOSS[,1]=Obs_mat2[,"id_row"]
 Count_data_BOSS[,4]=Obs_mat2[,"numseals"]
@@ -174,17 +213,6 @@ for(imap in 1:nrow(Mapping)){
 }
 Area=Area/gArea(Data$Grid[[1]][1,])
 
-###output bearded data set for preferential sampling analysis
-n_bearded=length(which(Obs_mat2[,"species"]=="bd"))
-Obs_bearded=Obs_mat2[which(Obs_mat2[,"species"]=="bd"),]
-Count_bd = c(tabulate(Obs_bearded[,"id_row"]),rep(0,length(Mapping)-max(Obs_bearded$id_row)))
-Count_data_bearded=matrix(0,length(Count_bd),3)
-colnames(Count_data_bearded)=c('Cell','AreaSurveyed','Count')
-Count_data_bearded[,'Count']=Count_bd
-Count_data_bearded[,'Cell']=Mapping
-Count_data_bearded[,'AreaSurveyed']=Area
-Bearded_effort = list(Mapping=Mapping,Count.data=Count_data_bearded,Area.hab=1-Data$Grid[[1]]$land_cover,Area.trans=Area,DayHour=DayHour)
-save(Bearded_effort,file="Bearded_effort.Rda")
 
 #Knot calculations
 Coords=coordinates(Data$Grid[[1]])
@@ -273,6 +301,7 @@ for(it in 1:t.steps){
 Hab_cov$Ecoregion=factor(Hab_cov$Ecoregion)
 Hab_cov$depth=Hab_cov$depth/mean(Hab_cov$depth)  #note: this is the 2nd time this has been standardized (1st was wrt US + Russia grid)
 Hab_cov$depth2=Hab_cov$depth^2
+Hab_cov$sqrt_edge = sqrt(Hab_cov$dist_edge)
 
 ###Observer covariate matrix - include stuff like environmental variables associated with survey conditions
 #can also use this for haulout
@@ -283,5 +312,80 @@ Obs_cov$wind=Wind
 for(i in 1:4)Obs_cov[,i]=Obs_cov[,i]/mean(Obs_cov[,i])
 
 Psi=p13
-save(Mapping,Dat,K,Area_hab,Area_trans,DayHour,Thin,Prop_photo,Hab_cov,Obs_cov,Psi,file="BOSS_data_2012.Rda")
+
+#add in some 'zero' data to anchor model in places where there's no ice
+Surveyed=c(1:nrow(Mapping))  #number index of mapping values where surveys actually occur
+n_zeros=100  #number of 'extra zeros' to put in (max is around 3000; to use max set n.zeros=NA)
+Temp=which(Data$Grid[[1]]@data[,"ice_conc"]<.001)
+Which_no=matrix(1,length(Temp),2)
+Which_no[,1]=Temp
+for(it in 2:t.steps){
+  Temp=which(Data$Grid[[it]]@data[,"ice_conc"]<.001)
+  Cur_mat=matrix(it,length(Temp),2)
+  Cur_mat[,1]=Temp
+  Which_no=rbind(Which_no,Cur_mat)
+}
+if(is.na(n_zeros)==FALSE)Which_no=Which_no[sample(c(1:nrow(Which_no)),n_zeros),]
+
+
+#get rid of these if they were actually sampled [already in dataset] and readjust sizes of various quantities
+Mapping_1d=(Mapping[,2]-1)*S+Mapping[,1]  
+Which_no_1d=(Which_no[,2]-1)*S+Which_no[,1]
+I_sampled=Which_no_1d%in%Mapping_1d
+I_sampled2=Mapping_1d%in%Which_no_1d
+#Area.trans[which(I.sampled2==TRUE)]=0.9  #change area sampled in 0 ice cells to 0.9 #no, this messes up initial density estimates
+Which_no_1d=Which_no_1d[which(I_sampled==0)]
+Which_no=Which_no[which(I_sampled==0),]
+#now add in 0 ice cells to list of sampled cells and adjust related quantities
+Mapping=rbind(Mapping,Which_no)
+Area_trans=c(Area_trans,rep(.9,length(Which_no_1d)))
+#n_transects=n_transects+length(Which_no_1d)
+Tmp=matrix(1,nrow(Mapping),2)
+Tmp[1:nrow(DayHour),]=as.matrix(DayHour)
+Tmp[,1]=Mapping[,2]
+DayHour=Tmp
+Thin2=array(1,dim=c(n_species,nrow(DayHour),dim(Thin)[3]))
+Thin2[,1:length(Surveyed),]=Thin
+Thin=Thin2  
+
+
+#look for seals seen where not much ice - cells that have ice<0.01 where seals are seen are replaced with U(0.05,0.3) random variates
+Which_seals=unique(Dat[,"Transect"])
+Mapping_1d=(Mapping[,2]-1)*S+Mapping[,1]  
+I_replace=I_seal=rep(0,length(Mapping_1d))
+Which_less=which(Hab_cov[Mapping_1d,"ice_conc"]<0.01)
+I_replace[Which_less]=1
+I_seal[Which_seals]=1
+I_replace=I_seal*I_replace
+Which_replace=which(I_replace==1)
+for(iobs in 1:length(Which_replace)){ #8 such replacements
+  cur_s=Mapping[Which_less[iobs],1]
+  cur_t=Mapping[Which_less[iobs],2]
+  new_ice=Data$Adj[cur_s,]%*%Data$Grid[[cur_t]][["ice_conc"]]/sum(Data$Adj[cur_s,])
+  #new_ice=runif(1,0.05,0.3)
+  Hab_cov[S*(cur_t-1)+cur_s,"ice_conc"]=new_ice
+  Hab_cov[S*(cur_t-1)+cur_s,"ice2"]=new_ice^2
+  cat(paste('replaced cell',cur_s,'time',cur_t,'with original ice_conc',Data$Grid[[cur_t+5]]@data[cur_s,"ice_conc"],'with ice=',new_ice,'\n'))
+}
+
+
+###output bearded data set for preferential sampling analysis
+n_bearded=length(which(Obs_mat2[,"species"]=="bd"))
+Obs_bearded=Obs_mat2[which(Obs_mat2[,"species"]=="bd"),]
+Count_bd = c(tabulate(Obs_bearded[,"id_row"]),rep(0,length(Mapping[,1])-max(Obs_bearded$id_row)))
+Count_data_bearded=matrix(0,length(Count_bd),3)
+colnames(Count_data_bearded)=c('Cell','AreaSurveyed','Count')
+Count_data_bearded[,'Count']=Count_bd
+Count_data_bearded[,'Cell']=Mapping[,1]
+Count_data_bearded[,'AreaSurveyed']=c(Area,rep(0,100))
+Bearded_effort = list(Mapping=Mapping,Count.data=Count_data_bearded,Area.hab=1-Data$Grid[[1]]$land_cover,Area.trans=Area,DayHour=DayHour)
+save(Bearded_effort,file="Bearded_effort.Rda")
+
+
+#take a look at where these occur
+#plot_N_map(1,as.matrix(Data$Grid[[20]][["ice_conc"]],ncol=1),highlight=581,Grid=Data$Grid)
+#plot_N_map(1,as.matrix(Data$Grid[[15]][["ice_conc"]],ncol=1),highlight=636,Grid=Data$Grid)
+
+
+save(Mapping,Surveyed,Dat,K,Area_hab,Area_trans,DayHour,Thin,Prop_photo,Hab_cov,Obs_cov,Psi,file="BOSS_data_2012.Rda")
 
