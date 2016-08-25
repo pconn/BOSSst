@@ -7,7 +7,7 @@ load('./AlaskaBeringData2012_2013_14Dec2015.Rdat')
 load('./Area_photographed.rda')  #produced with 'Calculate_area_surveyed_crawl.R'
 load('BOSS_Flt_dates.Rda')
 load('Knot_cell_distances.Rdata') #load object giving K matrix, Q for knots
-load('p13.RData')  #read in confusion array
+load('p13_obseffect.RData')  #read in confusion array
 load('Haulout_samples.Rdat')  #read in haulout proportion MCMC samples
 
 library(rgeos)
@@ -311,7 +311,16 @@ Obs_cov[which(is.na(Obs_cov$interp_alt)),"interp_alt"]=1000  #1 missing interp_a
 Obs_cov$wind=Wind
 for(i in 1:4)Obs_cov[,i]=Obs_cov[,i]/mean(Obs_cov[,i])
 
-Psi=p13
+#create Psi matrix as average of observer relative contributions to the dataset
+Observer_counts = summary(as.factor(Obs_mat2[,"species_user"]))
+Observer_prop=as.numeric(Observer_counts[c("KYM.YANO","GAVIN.BRADY","SHAWN.DAHLE","ERIN.RICHMOND")])
+Observer_prop = Observer_prop/sum(Observer_prop)
+Which_psi = sample(c(1:(dim(p13)[4])),10000)
+p13_sampled=p13[,,,Which_psi]
+Psi=Observer_prop[1]*p13_sampled[,,1,]
+for(iobs in 2:4){
+  Psi=Psi+Observer_prop[iobs]*p13_sampled[,,iobs,]
+}
 
 #add in some 'zero' data to anchor model in places where there's no ice
 Surveyed=c(1:nrow(Mapping))  #number index of mapping values where surveys actually occur
@@ -320,7 +329,7 @@ Temp=which(Data$Grid[[1]]@data[,"ice_conc"]<.001)
 Which_no=matrix(1,length(Temp),2)
 Which_no[,1]=Temp
 for(it in 2:t.steps){
-  Temp=which(Data$Grid[[it]]@data[,"ice_conc"]<.001)
+  Temp=which(Data$Grid[[it+5]]@data[,"ice_conc"]<.001)
   Cur_mat=matrix(it,length(Temp),2)
   Cur_mat[,1]=Temp
   Which_no=rbind(Which_no,Cur_mat)

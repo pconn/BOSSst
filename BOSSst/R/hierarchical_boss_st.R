@@ -58,6 +58,9 @@
 #'  "post.loss"  If TRUE, observed and predicted detections are compiled for posterior predictive loss 
 #'  "GOF"        If TRUE, calculate several posterior predictive checks.  ** Note: Some of these are hardwired for BOSS data ** 
 #'  "gIVH"       If TRUE, calculate generalized independent variable hull
+#'  "start.file" An .RData file.  If present, load starting values from this file (useful for continuing MCMC)
+#'  "save.file"  An .RData file.  If present, save the workspace at regular intervals for easier continuation
+#'  "save.every" How often to save the workspace; e.g. if 100000, then save every 100000 iterations
 #' @param Inits	An (optional) list object providing initial values for model parameters, with the following objects:
 #'  "hab": Initial values for habitat linear predictor parameters for poisson model;
 #'	"G": Gives true group abundance (vector; 1 entry for each species)
