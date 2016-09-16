@@ -15,7 +15,7 @@
 #' @param Area.trans	A vector giving the effective area covered by each transect as fraction of total area in the strata it is located
 #' @param DayHour A (n.transect X 2) matrix providing row and column entries into the Thin array. Each row corresponds to an entry in Mapping
 #' @param Thin An (n.species X n.transects X n.iter) array providing n.iter posterior samples of the thinning parameters
-#' @param Prop.photo A vector giving the proportion of of the area sampled in each transect that is photographed (still needed for GOF??)
+#' @param Prop.photo A vector giving the proportion of of the area sampled in each transect that is photographed (needed for WAIC, GOF)
 #' @param n.species An integer giving the true number of species
 #' @param n.obs.cov	Number of observer covariates (e.g., visibility, etc.)
 #' @param Hab.cov	A data.frame object giving covariates thought to influence abundance intensity at strata level; column names index individual covariates; # rows = S*T
@@ -48,7 +48,9 @@
 #'	"adapt": if adapt==TRUE, adapts MCMC proposals 
 #'  "n.adapt": if adapt==TRUE, number of adapt iterations to employ (note: need to make burnin>n.adapt)
 #'  "MH.N" vector of standard deviation for total abundance MH updates (1 for each species)
-#'  "fix.tau.epsilon" If TRUE, fixes tau.epsilon to 100
+#'  "fix.tau.epsilon" A TRUE/FALSE value OR an n.species length vector of TRUE/FALSE values.  If TRUE, fixes tau.epsilon to initial values. Default is FALSE
+#'  "fix.tau.linear" If set to TRUE (and Control$fix.tau.epsilon==TRUE), will linearly change tau.epsilon values from Inits$tau.eps to Inits$tau.eps.end through duration of adapt phase
+#'  "Tau.eps.end" If provided, a vector (one for each species) of values tau.epsilon should be fixed to at end of adapt phase (used in conjunction with Control$fix.tau.linear)
 #'  "species.optim" If TRUE, optimizes species updates [FALSE uses MH algorithm]
 #'  "update.sp" If FALSE (default is TRUE), "True.species" must be provided and species updates won't be conducted
 #'  "misID" If TRUE (default), update misID params
@@ -64,7 +66,7 @@
 #' @param Inits	An (optional) list object providing initial values for model parameters, with the following objects:
 #'  "hab": Initial values for habitat linear predictor parameters for poisson model;
 #'	"G": Gives true group abundance (vector; 1 entry for each species)
-#'	"tau.eta": If spat.ind==FALSE, precision for spatial ICAR model(s) for the Poisson component
+#'	"tau.eta": If spat.ind==FALSE, precision for spatial random effects model(s) for the Poisson component
 #'	"tau.eps": Precision for exchangeable errors on classification probabilities 
 #'  One need not specify an initial value for all parameter types (if less are specified, the others are generated randomly)
 #' @param Prior.pars	A list object giving parameters of prior distribution.  Includes the following objects
@@ -99,6 +101,7 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
 	n.ind.cov=ncol(Dat)-(3+n.obs.cov) #number of individual covariates 
   Obs.NArm=Dat[,3][-which(is.na(Dat[,3]))]
   n.obs.types=length(unique(Obs.NArm))
+  if(is.null(Control$fix.tau.linear))Control$fix.tau.linear=FALSE
 	
 	#By no means exhaustive checking to make sure input values are internally consistent
   #More later...	
@@ -240,6 +243,7 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
 		}
 	}  
 
+	
 	Par=generate_inits_BOSSst(t.steps=t.steps,Surveyed=Surveyed,DM.hab=DM.hab,N.hab.par=N.hab.par,G.transect=G.transect,thin.mean=apply(Thin,1,'mean'),Area.trans=Area.trans,Area.hab=Area.hab,Mapping=Mapping,spat.ind=spat.ind,grp.mean=Cov.prior.parms[,1,1])	
   if(is.null(Psi)==FALSE)Par$Psi=Psi[,,sample(dim(Psi)[3],1)]
   

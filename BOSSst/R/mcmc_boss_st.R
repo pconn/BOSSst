@@ -30,7 +30,9 @@
 #'  "species.optim": if TRUE, species updates are optimized for discrete covariates 
 #'  "update.sp" If FALSE (default is TRUE), "True.species" must be provided and species updates won't be conducted
 #'  "misID" If TRUE, update misID params
-#'  "fix.tau.epsilon": if TRUE, fix tau_epsilon to 100
+#'  "fix.tau.epsilon" A TRUE/FALSE value OR an n.species length vector of TRUE/FALSE values.  If TRUE, fixes tau.epsilon to value specified in Inits.  Default is FALSE
+#'  "fix.tau.linear" If set to TRUE (and Control$fix.tau.epsilon==TRUE), will linearly change tau.epsilon values from Inits$tau.eps to Control$tau.eps.end through duration of adapt phase
+#'  "Tau.eps.end" If provided, a vector (one for each species) of values tau.epsilon should be fixed to at end of adapt phase (used in conjunction with Control$fix.tau.linear)
 #'  "est.alpha": if TRUE, estimate full scale spatio-temporal random effects; if FALSE, just estimate intercept and slope for each knot 
 #'  "post.loss"  If TRUE, observed and predicted detections are compiled for posterior predictive loss 
 #'  "GOF"        If TRUE, calculate several posterior predictive checks
@@ -113,6 +115,11 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
   for(i in 2:n.knots)Q=bdiag(Q,Q1)  #precision matrix a block diagonal matrix
   Q.t=t(Q)  
   
+  #make fix.tau.epsilon into a vector if it isn't
+  if(length(Control$fix.tau.epsilon)>1 & length(Control$fix.tau.epsilon)!=Meta$n.species)cat("WARNING: length of Control$fix.tau.epsilon not equal to the number of species!")
+  if(length(Control$fix.tau.epsilon)==Meta$n.species)Fix.tau.epsilon=Control$fix.tau.epsilon
+  else Fix.tau.epsilon=rep(Control$fix.tau.epsilon,Meta$n.species)
+  
   #sort count data by time and cell so that some of the list to vector code will work right
   Order=order(Meta$CellTime[,2][Dat[,"Transect"]],Meta$CellTime[,1][Dat[,"Transect"]])
   Dat=Dat[Order,]
@@ -120,6 +127,8 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
   
   Sampled=unique(Meta$Mapping)
   n.unique=length(Sampled) 
+  Sampled.time = vector("list",Meta$t.steps)  #each list element indexes the space-time entry for sampled cells in a given time step
+  for(it in 1:Meta$t.steps)Sampled.time[[it]]=(it-1)*Meta$S+Mapping[which(Mapping[,2]==it),1]
 
   #declare index, function for accessing thinning probabilities for specific transects
   #Thin.pl=Meta$t.steps*(Meta$DayHour[,2]-1)+Meta$DayHour[,1]
@@ -192,7 +201,6 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
  	}
  	  
 	#initialize MCMC, Acceptance rate matrices
-  if(Control$fix.tau.epsilon==TRUE){for(isp in 1:Meta$n.species)Par$tau.eps[isp]=100}
 	mcmc.length=(Control$iter-Control$burnin)/Control$thin
   mcmc.length.buffer = mcmc.length/Control$n.files
   counter.buffer=1
@@ -231,6 +239,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
         Cov.logL[,isp]=Cov.logL[,isp]+sapply(Cov.pointer[,icov],'switch_pdf',pdf=Cov.prior.pdf[isp,icov],cur.par=Par$Cov.par[isp,,icov],RE=0)       
       }
     }
+    #poop=asdf
     Cov.pl=apply(matrix(Dat[Which.photo,(4+n.obs.cov+1):(4+n.obs.cov+Meta$n.ind.cov)],ncol=Meta$n.ind.cov),1,'get_place',Pointer=Cov.pointer)      
   }
   if(Control$species.optim==TRUE)Species.cell.probs=matrix(0,n.misID.updates,n.species)
@@ -319,13 +328,17 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
   if(Control$gIVH){
   }
   if(is.null(Meta$Prop.photo))Meta$Prop.photo=rep(1.0,Meta$n.transects)
-  if(Control$post.loss | Control$GOF){ #calculate observed counts of different detection types, initialize prediction arrays
-    Obs.det=Exp.det=matrix(0,Meta$n.transects,n.obs.types+1) #col=n.obs.types+1 is for hotspots w/o accompanying photographs
-    Pred.det=array(0,dim=c(mcmc.length,Meta$n.transects,n.obs.types+1))
-    for(iobs in 1:n.photo)Obs.det[Dat[Which.photo[iobs],"Transect"],Dat[Which.photo[iobs],"Obs"]]=Obs.det[Dat[Which.photo[iobs],"Transect"],Dat[Which.photo[iobs],"Obs"]]+Dat[Which.photo[iobs],"Group"]
-    Obs.det[,n.obs.types+1]=tabulate(Dat[Which.no.photo,"Transect"],nbins=Meta$n.transects)    
-    apply_misID<-function(n,Cur.psi)rmultinom(1,n,prob=Cur.psi)  #define function for sampling observation types by transects
-  }
+  
+  ###matrices of observed, predicted detections
+  Obs.det=Exp.det=matrix(0,Meta$n.transects,n.obs.types+1) #col=n.obs.types+1 is for hotspots w/o accompanying photographs
+  Pred.det=array(0,dim=c(mcmc.length,Meta$n.transects,n.obs.types+1))
+  for(iobs in 1:n.photo)Obs.det[Dat[Which.photo[iobs],"Transect"],Dat[Which.photo[iobs],"Obs"]]=Obs.det[Dat[Which.photo[iobs],"Transect"],Dat[Which.photo[iobs],"Obs"]]+Dat[Which.photo[iobs],"Group"]
+  Obs.det[,n.obs.types+1]=tabulate(Dat[Which.no.photo,"Transect"],nbins=Meta$n.transects)    
+  apply_misID<-function(n,Cur.psi)rmultinom(1,n,prob=Cur.psi)  #define function for sampling observation types by transects
+  
+  
+  #set up matrices holding quantities for WAIC calculations
+  Log.density = matrix(0,mcmc.length,Meta$t.steps)
   
 	#initialize random effect matrices for individual covariates if required
 	if(sum(1-Meta$Cov.prior.fixed)>0)RE.cov=matrix(0,n.obs,Meta$n.ind.cov)
@@ -365,6 +378,9 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 	  Control=Control_tmp
 	  Control$MH.omega=MH.omega
 	}
+	
+	if(Control$fix.tau.linear==TRUE)Tau.eps.diff=Control$Tau.eps.end-Par$tau.eps  #for linear change in tau.eps in adapt phase
+	
 	st <- Sys.time()
 	##################################################
 	############   Begin MCMC Algorithm ##############
@@ -458,7 +474,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 		  } 
 
 			#update tau_epsilon	 (precision for exchangeable errors on classification odds)
-			if(Control$fix.tau.epsilon==FALSE){
+			if(Fix.tau.epsilon[isp]==FALSE){
 			  Diff=Par$Omega[isp,Sampled]-Omega.pred
 			  Par$tau.eps[isp] <- rgamma(1,n.unique/2 + Prior.pars$a.eps, as.numeric(crossprod(Diff,Diff))*0.5 + Prior.pars$b.eps)
 			}
@@ -476,9 +492,6 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 			if(PROFILE==TRUE){
 			  cat(paste("fixed effects: ", (Sys.time()-st),'\n'))
 			  st=Sys.time()
-			}
-			if(iiter==125000){
-			  crap=1
 			}
 			#update kernel weights/REs for space-time model
 			if(Meta$spat.ind==FALSE){
@@ -541,7 +554,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 		    #confusion matrix contributions
 		    if(Meta$misID)MH=MH+log(sapply(Index.misID,"get_mat_entries",Mat=Par$Psi,Row=Prop.sp,Col=Dat[Which.photo[Which.sampled],"Obs"]))-log(sapply(Index.misID,"get_mat_entries",Mat=Par$Psi,Row=Dat[Which.photo[Which.sampled],"Species"],Col=Dat[Which.photo[Which.sampled],"Obs"]))
 		    #Poisson abundance model contributions (new state)
-        
+        #Lambda.trans missing here?
 		    MH=MH+log(sapply(Index.misID,"get_mat_entries",Mat=Lambda.trans,Row=Prop.sp,Col=Dat[Which.photo[Which.sampled],"Transect"]))
 		    Rsamp=runif(n.misID.updates)
 		    for(isamp in 1:n.misID.updates){
@@ -698,6 +711,11 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 				#Old.accept.omega=Accept$Omega
         Old.accept.G=Accept$G
 			}
+		  for(isp in 1:Meta$n.species){
+		    if(iiter%%100==0 & Control$fix.tau.linear & Control$fix.tau.epsilon[isp]){
+		      Par$tau.eps[isp] = Par$tau.eps[isp] + iiter/Control$n.adapt*Tau.eps.diff[isp]
+		    }
+		  }
 		}
     if(Control$adapt & iiter%%100==0){
       #adapt Omega proposal covariance matrix using Alg 2 of Shaby and Wells (2010)
@@ -763,6 +781,27 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
       #    GOF.counts[(iiter-Control$burnin)/Control$thin,,1:n.obs.types]=GOF.counts[(iiter-Control$burnin)/Control$thin,,1:n.obs.types]+t(sapply(G.det,"apply_misID",Cur.psi=Par$Psi[isp,]))
       #  }
       #}
+      
+      #calculate Pr(Data|Params) for WAIC calculations
+      for(it in 1:Meta$t.steps){
+        #component 1: Pr("True Counts" | Par)
+        for(isp in 1:Meta$n.species){
+          Cur.thin=get_thin(Meta$Thin,Thin.pl,isp,thin.pl)*Meta$Area.trans
+          Cur.pi = Pi[[isp]][Sampled.time[[it]]]*Cur.thin[Time.indices[it,1]:Time.indices[it,2]]
+          cur.g = round(Par$G.tot[isp])
+          Log.density[(iiter-Control$burnin)/Control$thin,it]=Log.density[(iiter-Control$burnin)/Control$thin,it]+ 
+            dmultinom(x=c(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]],cur.g-sum(Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]])),
+                      size = cur.g,prob=c(Cur.pi,1-sum(Cur.pi)),log=TRUE)
+        }    
+        #component 2: miclassification
+        Pred = matrix(0,Nt.obs[it],ncol(Obs.det))
+        for(isp in 1:Meta$n.species){
+          Misclass_tmp=t(matrix(c(Par$Psi[isp,]),ncol(Obs.det)-1,Nt.obs[it]))*Prop.photo[Time.indices[it,1]:Time.indices[it,2]]   
+          Misclass_tmp=cbind(Misclass_tmp,1-Prop.photo[Time.indices[it,1]:Time.indices[it,2]])
+          Pred = Pred + Meta$G.transect[isp,Time.indices[it,1]:Time.indices[it,2]]*Misclass_tmp
+        } 
+        Log.density[(iiter-Control$burnin)/Control$thin,it]=Log.density[(iiter-Control$burnin)/Control$thin,it]+sum(dpois(Obs.det[Time.indices[it,1]:Time.indices[it,2],],Pred,log=TRUE))
+      }    
       
       #posterior predictions of data given regression & misclassification parameters
       if(Control$post.loss | Control$GOF){
@@ -843,6 +882,9 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 		}
 	}
 
+	#compute WAIC
+	WAIC = -2*sum(colMeans(Log.density)) + 2*sum(apply(Log.density,2,'var'))
+	
 	#compute some post hoc GOF stuff
 	if(Control$GOF){
 	  n.comp = (cur.iter-Control$burnin)/Control$thin
@@ -864,7 +906,7 @@ mcmc_boss_st<-function(Par,Dat,Psi,cur.iter,adapt,Control,DM.hab,Prior.pars,Meta
 	if(is.null(Control$save.file)==FALSE)save(list = ls(),file=Control$save.file,envir=environment())
 	if(Meta$n.species>1)Post$Psi=MCMC$Psi
 	MCMC=convert.BOSSst.to.mcmc(MCMC=MCMC,N.hab.par=Meta$N.hab.par,Cov.par.n=Cov.par.n,Hab.names=Hab.names,Cov.names=Cov.names,fix.tau.eps=Meta$fix.tau.eps,spat.ind=Meta$spat.ind)
-	Out=list(MCMC=MCMC,Accept=Accept,Control=Control,Obs.N=Obs.N,Pred.N=Pred.N,Obs.det=Obs.det,Pred.det=Pred.det,DM.hab=DM.hab,Hab.names=Hab.names)
+	Out=list(MCMC=MCMC,Accept=Accept,Control=Control,Obs.N=Obs.N,Pred.N=Pred.N,Obs.det=Obs.det,Pred.det=Pred.det,DM.hab=DM.hab,Hab.names=Hab.names,WAIC=WAIC)
 	if(Control$GOF)Out$GOF=list(p_sampled_ft=p_ft,p_0=p_0/n.comp,p_tail=p_tail/n.comp)
 	Out
 }

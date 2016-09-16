@@ -39,17 +39,20 @@ Prior_pars=list(beta.tau=0.0001,
                 beta0.tau.rw2=2,
                 beta1.tau.rw2=5000)
 
-Control=list(iter=850000,burnin=50000,thin=500,n.adapt=20000,predict=TRUE,MH.N=rep(0.2,n_species),adapt=TRUE,fix.tau.epsilon=FALSE,species.optim=TRUE,update.sp=TRUE,est.alpha=F,n.files=10,fname="./output/Bering2012all_test")        
-Control$save.file="BOSS2012_mcmc_workspace1.RData"
-Control$save.every=100000
+Control=list(iter=1200000,burnin=700000,thin=5,n.adapt=600000,predict=TRUE,MH.N=rep(0.2,n_species),adapt=TRUE,fix.tau.epsilon=rep(TRUE,4),species.optim=TRUE,update.sp=TRUE,est.alpha=F,n.files=10,fname="./output/Bering2012all_test")        
+Control$fix.tau.linear=TRUE
+Control$Tau.eps.end=c(20,20,20,20)
+Control$save.file="BOSS2012_mcmc_workspace.RData"
+Control$save.every=10000
 Control$post.loss=TRUE
 Control$GOF=TRUE
 Control$gIVH=0
+#Control$start.file="BOSS2012_mcmc_workspace2.RData"
+Control$start.file=NULL
 
 Dat[,4]=as.numeric(Dat[,4])
 Prop_photo=rep(0.5,n_transects)
 Obs_cov=NULL
-Inits=NULL
 grps=TRUE
 Hab_formula=hab_formula
 n_obs_cov=0
@@ -96,7 +99,7 @@ Cov.prior.n=Cov_prior_n
 n.species=n_species
 n.obs.cov=0
 spat.ind=spat_ind
-Inits=NULL
+Inits=list(tau.eps=c(2,2,2,2))
 grps=TRUE
 Prior.pars=Prior_pars
 True.species=True_sp
@@ -106,12 +109,19 @@ Alpha.true=Alpha_true
 DEBUG=TRUE
 
 
-set.seed(12345)
-MCMC=hierarchical_boss_st(Dat=Dat,K=K,Area.hab=Area_hab,Area.trans=Area_trans,Mapping=Mapping,DayHour=DayHour,Thin=Thin,Prop.photo=Prop.photo,Hab.cov=Hab_cov,Obs.cov=NULL,Hab.formula=hab_formula,Cov.prior.pdf=Cov_prior_pdf,Cov.prior.parms=Cov_prior_parms,Cov.prior.fixed=Cov_prior_fixed,Cov.prior.n=Cov_prior_n,n.species=n_species,n.obs.cov=0,spat.ind=spat_ind,Psi=Psi,Inits=NULL,grps=TRUE,Control=Control,Prior.pars=Prior_pars,Surveyed=Surveyed,True.species=True_sp,Omega.true=Omega_true,Eta.true=Eta_true,Alpha.true=Alpha_true,DEBUG=TRUE)
-save(MCMC,file="BOSS2012_MCMC_output1.RData")
+set.seed(12346)
+#Control$start.file=NULL
+MCMC=hierarchical_boss_st(Dat=Dat,K=K,Area.hab=Area_hab,Area.trans=Area_trans,Mapping=Mapping,DayHour=DayHour,Thin=Thin,Prop.photo=Prop.photo,Hab.cov=Hab_cov,Obs.cov=NULL,Hab.formula=hab_formula,Cov.prior.pdf=Cov_prior_pdf,Cov.prior.parms=Cov_prior_parms,Cov.prior.fixed=Cov_prior_fixed,Cov.prior.n=Cov_prior_n,n.species=n_species,n.obs.cov=0,spat.ind=spat_ind,Psi=Psi,Inits=Inits,grps=TRUE,Control=Control,Prior.pars=Prior_pars,Surveyed=Surveyed,True.species=True_sp,Omega.true=Omega_true,Eta.true=Eta_true,Alpha.true=Alpha_true,DEBUG=TRUE)
+save(MCMC,file="BOSS2012_MCMC_output2.RData")
 
 load('./AlaskaBeringData2012_2013_14Dec2015.Rdat')
 PostN=cat_preds(fname=Control$fname,n.files=Control$n.files)
-Cur.G=matrix(apply(PostN[3,1:20,],2,'median'),S,t_steps)
+Cur.G=matrix(apply(PostN[2,1:80,],2,'median'),S,t_steps)
 #for(i in 1:t.steps){
+plot_N_map(20,Cur.G,Grid=Data$Grid$y2012)
+
+#plot from workspace
+load('BOSS2012_mcmc_workspace.rdata')
+Cur.G=matrix(Par$G[4,],Meta$S,Meta$t.steps)
 plot_N_map(1,Cur.G,Grid=Data$Grid$y2012)
+
