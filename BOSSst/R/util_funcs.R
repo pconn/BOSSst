@@ -330,7 +330,7 @@ plot_N_map<-function(cur.t,N,Grid,highlight=NULL,leg.title="Abundance"){
   require(rgeos)
   require(ggplot2)
   library(RColorBrewer)
-  myPalette <- colorRampPalette(rev(brewer.pal(11, "Spectral")))
+  myPalette <- colorRampPalette(brewer.pal(9, "YlOrBr"))
   Tmp=Grid[[1]]
   if(is.null(highlight)==FALSE){
     midpoints=data.frame(gCentroid(Tmp[highlight,],byid=TRUE))

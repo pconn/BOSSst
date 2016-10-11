@@ -176,8 +176,8 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
 	    }
 	  }	
   }
-	  
-	#add an additional column for "True species" and fill
+ 
+  #add an additional column for "True species" and fill
 	True.sp=as.numeric(as.character(Dat[,"Species"]))
   n.missed=sum(is.na(True.sp))
   Which.photo=which(is.na(True.sp)==FALSE)
@@ -199,7 +199,6 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
     True.sp[Which.photo[iind]]=sample(c(1:n.species),1,prob=Psi[,True.sp[Which.photo[iind]],1])
   }
   
-	  
 	if(is.null(True.species)==FALSE)True.sp=True.species #for debugging
 	Dat.num=cbind(Dat.num[,1:3],True.sp,Dat.num[,4:ncol(Dat.num)])
 	cur.colnames=colnames(Dat)
