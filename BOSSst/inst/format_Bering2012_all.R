@@ -28,7 +28,7 @@ boss_hotspots_sp=spTransform(boss_hotspots_sp, CRS(laea_180_proj))
 #length(crap)
 
 
-# 2012: Run analysis for 4/10 - 5/8
+# 2012: Run analysis for 4/10 - 5/8 (note Grid is 4/5-5/22)
 date.start=as.Date("2012-04-10")
 date.end=as.Date("2012-05-08")
 t.steps=as.numeric(date.end-date.start)+1

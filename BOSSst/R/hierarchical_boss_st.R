@@ -118,7 +118,7 @@ hierarchical_boss_st<-function(Dat,K,Area.hab=1,Mapping,Area.trans,DayHour,Thin,
 	if(length(colnames(Dat))!=length(cur.colnames))cat("\n ERROR: mismatch between dimension of Dat and expected columns: check to make sure n.obs.cov, etc. correct")
 	colnames(Dat)=cur.colnames
   
-  #sorted data in increasing order of time, etc.
+  #sorted data in increasing order of time, etc.  
   Tmp.mapping=(Mapping[,2]-1)*S+Mapping[,1]
   Order=rank(Tmp.mapping)
   Mapping[Order,]=Mapping
