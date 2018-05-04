@@ -10,6 +10,15 @@ MCMC_chain1 = MCMC$N.tot[,1:anal.iter]
 load("BOSS2013_mcmc_workspace2.RData")
 MCMC_chain2 = MCMC$N.tot[,1:anal.iter]
 
+load("BOSS2013_mcmc_workspace_noST.RData")
+MCMC_chain1_noST = MCMC$N.tot[,1:anal.iter]
+
+load("BOSS2013_mcmc_workspace_noST2.RData")
+MCMC_chain2_noST = MCMC$N.tot[,1:anal.iter]
+
+
+
+
 load("BOSS2012_MCMC_output2.RData")
 MCMC_chain2 = MCMC
 
