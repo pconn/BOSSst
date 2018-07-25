@@ -14,6 +14,8 @@ library(sp)
 library(RPostgreSQL)
 library(sf)
 
+set.seed(12345)  #need because pseudo-zeroes are selected randomly
+
 # Run code -------------------------------------------------------
 # Extract data from DB ------------------------------------------------------------------
 con <- RPostgreSQL::dbConnect(PostgreSQL(), 
@@ -33,13 +35,13 @@ boss.sf <- sf::st_read_db(con,
 boss.sf2 = boss.sf[which(boss.sf$hotspot_type=="seal"),]
 boss.sf2 = sf::st_transform(boss.sf2,laea_180_proj)
 
-#remove duplicated entries - these are mom-pup pairs
-Dup = which(duplicated(boss.sf2$hotspot_id))
-for(i in 1:length(Dup)){
-  Cur.which = which(boss.sf2$hotspot_id==boss.sf2$hotspot_id[Dup[i]])
-  boss.sf2$gross_age[Cur.which[1]]="mom_pup"
-}
-boss.sf2=boss.sf2[-Dup,]
+#remove duplicated entries - these are mom-pup pairs  #####  Stacie fixed in DB
+# Dup = which(duplicated(boss.sf2$hotspot_id))
+# for(i in 1:length(Dup)){
+#   Cur.which = which(boss.sf2$hotspot_id==boss.sf2$hotspot_id[Dup[i]])
+#   boss.sf2$gross_age[Cur.which[1]]="mom_pup"
+# }
+# boss.sf2=boss.sf2[-Dup,]
                        
 #restrict to 'on effort'
 boss.sf2=boss.sf2[which(boss.sf2$effort=="On"),]
@@ -246,8 +248,8 @@ x.max=max(Coords[,1])+100000
 y.min=min(Coords[,2])-100000
 y.max=max(Coords[,2])+100000
 
-X=x.min+(x.max-x.min)/9*c(0:9)
-Y=y.min+(y.max-y.min)/9*c(0:9)
+X=x.min+(x.max-x.min)/8*c(0:8)
+Y=y.min+(y.max-y.min)/8*c(0:8)
 XY=expand.grid(x=X,y=Y)
 
 Knots=SpatialPoints(coords=XY,proj4string=CRS(proj4string(Data$Grid[[1]])))
@@ -287,28 +289,52 @@ Flt_table[which(Flt_table$I_otter==1 & Flt_table$yr=="12"),"det_center"]=1
 Flt_table[which(Flt_table$Flt=="12_OtterFl12"),c("det_port","det_center","det_star")]=1
 Det_wgt = rep(0,n_surveyed)
 
-#produce thinning array for Bayesian models - reformulating this to be an n_species * Cells sampled * n_iter array 
-n_species=4
-Thin = array(1,dim=c(n_species,n_surveyed,1000))
-P=rbeta(1000,67,5)  #conjugate beta(1,1) for binomial detection data (66/70 successes)
+
+### produce a spatial points object giving grid cell centroid, date-time, and detection algortihm indicator for each cell surveyed
+Centroids_sf = st_as_sf(gCentroid(Data$Grid[[1]],byid=TRUE))
+Sampled_cells_ST = Centroids_sf[Grid_sampled,1]
+Sampled_cells_ST$dt = boss_grid_env$grid_dt
+Sampled_cells_ST$lon = Longitude.sampled
+Sampled_cells_ST$Ep = rep(0,n_surveyed)
+Sampled_cells_ST$Varp = rep(0,n_surveyed)
+Ep1 = 66/70
+Ep2 = 68/70
+varp1 = Ep1*(1-Ep1)/70
+varp2 = Ep2*(1-Ep2)/70
 for(isamp in 1:n_surveyed){
   I_method = Flt_table[which(Flt_table$Flt==boss_grid_env[isamp,"flightid"]),c("det_port","det_center","det_star")]
   Wgt = c(sum(as.matrix(I_method,nrow=1)%*%matrix(as.numeric(boss_grid_env[isamp,c("img_count_port","img_count_center","img_count_starboard")]),ncol=1)),
           sum(as.matrix(1-I_method,nrow=1)%*%matrix(as.numeric(boss_grid_env[isamp,c("img_count_port","img_count_center","img_count_starboard")]),ncol=1)))
   Wgt=Wgt/sum(Wgt)    
-  P1=rbeta(1000,67,5) #manual method
-  P2=rbeta(1000,69,3)  #Skeyes 2.0 method
-  I_method=(runif(1000)<Wgt[1])*1
-  P=I_method*P1+(1-I_method)*P2  #two point mixture based on photo sample size
-  for(isp in 1:4){
-    Thin[isp,isamp,]=P
-    ###TEMPORARY FIX: Set day 30 = Day 29; in future, should get haulout data for 1 day after last survey start day
-    if(DayHour[isamp,1]==30)DayHour[isamp,1]=29
-    if(isp==1)Thin[isp,isamp,]=Thin[isp,isamp,]*Haulout.samples$spotted[DayHour[isamp,1],DayHour[isamp,2],]
-    if(isp==2)Thin[isp,isamp,]=Thin[isp,isamp,]*Haulout.samples$ribbon[DayHour[isamp,1],DayHour[isamp,2],]
-    if(isp==3)Thin[isp,isamp,]=Thin[isp,isamp,]*Haulout.samples$bearded[DayHour[isamp,1],DayHour[isamp,2],]
-  }
+  Sampled_cells_ST[isamp,"Ep"]=Wgt[1]*Ep1+Wgt[2]*Ep2
+  Sampled_cells_ST[isamp,"Varp"]=Wgt[1]*varp1+Wgt[2]*varp2
 }
+save(Sampled_cells_ST,file="SampledCells_BOSS2012.RData")
+
+
+# 
+# #produce thinning array for Bayesian models - reformulating this to be an n_species * Cells sampled * n_iter array 
+# n_species=4
+# Thin = array(1,dim=c(n_species,n_surveyed,1000))
+# P=rbeta(1000,67,5)  #conjugate beta(1,1) for binomial detection data (66/70 successes)
+# for(isamp in 1:n_surveyed){
+#   I_method = Flt_table[which(Flt_table$Flt==boss_grid_env[isamp,"flightid"]),c("det_port","det_center","det_star")]
+#   Wgt = c(sum(as.matrix(I_method,nrow=1)%*%matrix(as.numeric(boss_grid_env[isamp,c("img_count_port","img_count_center","img_count_starboard")]),ncol=1)),
+#           sum(as.matrix(1-I_method,nrow=1)%*%matrix(as.numeric(boss_grid_env[isamp,c("img_count_port","img_count_center","img_count_starboard")]),ncol=1)))
+#   Wgt=Wgt/sum(Wgt)    
+#   P1=rbeta(1000,67,5) #manual method
+#   P2=rbeta(1000,69,3)  #Skeyes 2.0 method
+#   I_method=(runif(1000)<Wgt[1])*1
+#   P=I_method*P1+(1-I_method)*P2  #two point mixture based on photo sample size
+#   for(isp in 1:4){
+#     Thin[isp,isamp,]=P
+#     ###TEMPORARY FIX: Set day 30 = Day 29; in future, should get haulout data for 1 day after last survey start day
+#     if(DayHour[isamp,1]==30)DayHour[isamp,1]=29
+#     if(isp==1)Thin[isp,isamp,]=Thin[isp,isamp,]*Haulout.samples$spotted[DayHour[isamp,1],DayHour[isamp,2],]
+#     if(isp==2)Thin[isp,isamp,]=Thin[isp,isamp,]*Haulout.samples$ribbon[DayHour[isamp,1],DayHour[isamp,2],]
+#     if(isp==3)Thin[isp,isamp,]=Thin[isp,isamp,]*Haulout.samples$bearded[DayHour[isamp,1],DayHour[isamp,2],]
+#   }
+# }
 
 Prop_photo=rep(1,n_surveyed)
 
@@ -328,16 +354,9 @@ Hab_cov$depth=Hab_cov$depth/mean(Hab_cov$depth)  #note: this is the 2nd time thi
 Hab_cov$depth2=Hab_cov$depth^2
 Hab_cov$sqrt_edge = sqrt(Hab_cov$dist_edge)
 
-###Observer covariate matrix - include stuff like environmental variables associated with survey conditions
-#can also use this for haulout
-Wind=sqrt(boss_grid_env$narr_uwnd^2+boss_grid_env$narr_vwnd^2)
-Obs_cov=boss_grid_env[,c("interp_alt","narr_air2m","narr_prmsl")]
-Obs_cov[which(is.na(Obs_cov$interp_alt)),"interp_alt"]=1000  #1 missing interp_alt value
-Obs_cov$wind=Wind
-for(i in 1:4)Obs_cov[,i]=Obs_cov[,i]/mean(Obs_cov[,i])
 
 #create Psi matrix as average of observer relative contributions to the dataset
-Observer_counts = summary(as.factor(Obs_mat2[,"species_user"]))
+Observer_counts = summary(as.factor(Obs_mat[,"species_user"]))
 Observer_prop=as.numeric(Observer_counts[c("KYM.YANO","GAVIN.BRADY","SHAWN.DAHLE","ERIN.RICHMOND")])
 Observer_prop = Observer_prop/sum(Observer_prop)
 Which_psi = sample(c(1:(dim(p13)[4])),10000)
@@ -345,6 +364,32 @@ p13_sampled=p13[,,,Which_psi]
 Psi=Observer_prop[1]*p13_sampled[,,1,]
 for(iobs in 2:4){
   Psi=Psi+Observer_prop[iobs]*p13_sampled[,,iobs,]
+}
+#Mat_psi = matrix(Psi,4*13,10000)
+Mu_psi = apply(Psi,c(1,2),'mean')
+#convert to multinomial logit scale
+Cur_beta = Cur_beta2 = matrix(0,4,13)
+MisID_zero_cols = c(3,6,9,12)
+Beta_chain = matrix(0,36,10000)
+for(isp in 1:4){
+  log_Real0 = log(Mu_psi[isp,MisID_zero_cols[isp]])
+  Cur_beta[isp,] = log(Mu_psi[isp,])-log_Real0
+}
+Beta_psi=as.vector(t(Cur_beta[,c(1,2,4,5,7,8,10,11,13)]))
+
+for(iiter in 1:10000){
+  for(isp in 1:4){ 
+    log_Real0 = log(Psi[isp,MisID_zero_cols[isp],iiter])
+    Cur_beta2[isp,]=log(Psi[isp,,iiter])-log_Real0
+  }
+  Beta_chain[,iiter]=as.vector(t(Cur_beta2[,c(1,2,4,5,7,8,10,11,13)]))
+}
+
+VC_psi = matrix(0,4*9,4*9)
+for(i in 1:(4*9)){
+  for(j in 1:(4*9)){
+    VC_psi[i,j] = cov(Beta_chain[i,],Beta_chain[j,])
+  }
 }
 
 #add in some 'zero' data to anchor model in places where there's no ice
@@ -378,9 +423,9 @@ Tmp=matrix(1,nrow(Mapping),2)
 Tmp[1:nrow(DayHour),]=as.matrix(DayHour)
 Tmp[,1]=Mapping[,2]
 DayHour=Tmp
-Thin2=array(1,dim=c(n_species,nrow(DayHour),dim(Thin)[3]))
-Thin2[,1:length(Surveyed),]=Thin
-Thin=Thin2  
+#Thin2=array(1,dim=c(n_species,nrow(DayHour),dim(Thin)[3]))
+#Thin2[,1:length(Surveyed),]=Thin
+#Thin=Thin2  
 
 
 #look for seals seen where not much ice - cells that have ice<0.01 where seals are seen are replaced with U(0.05,0.3) random variates
@@ -403,23 +448,23 @@ for(iobs in 1:length(Which_replace)){ #8 such replacements
 }
 
 
-###output bearded data set for preferential sampling analysis
-n_bearded=length(which(Obs_mat2[,"species"]=="bd"))
-Obs_bearded=Obs_mat2[which(Obs_mat2[,"species"]=="bd"),]
-Count_bd = c(tabulate(Obs_bearded[,"id_row"]),rep(0,length(Mapping[,1])-max(Obs_bearded$id_row)))
-Count_data_bearded=matrix(0,length(Count_bd),3)
-colnames(Count_data_bearded)=c('Cell','AreaSurveyed','Count')
-Count_data_bearded[,'Count']=Count_bd
-Count_data_bearded[,'Cell']=Mapping[,1]
-Count_data_bearded[,'AreaSurveyed']=c(Area,rep(0,100))
-Bearded_effort = list(Mapping=Mapping,Count.data=Count_data_bearded,Area.hab=1-Data$Grid[[1]]$land_cover,Area.trans=Area,DayHour=DayHour)
-save(Bearded_effort,file="Bearded_effort.Rda")
-
+# ###output bearded data set for preferential sampling analysis
+# n_bearded=length(which(Obs_mat2[,"species"]=="bd"))
+# Obs_bearded=Obs_mat2[which(Obs_mat2[,"species"]=="bd"),]
+# Count_bd = c(tabulate(Obs_bearded[,"id_row"]),rep(0,length(Mapping[,1])-max(Obs_bearded$id_row)))
+# Count_data_bearded=matrix(0,length(Count_bd),3)
+# colnames(Count_data_bearded)=c('Cell','AreaSurveyed','Count')
+# Count_data_bearded[,'Count']=Count_bd
+# Count_data_bearded[,'Cell']=Mapping[,1]
+# Count_data_bearded[,'AreaSurveyed']=c(Area,rep(0,100))
+# Bearded_effort = list(Mapping=Mapping,Count.data=Count_data_bearded,Area.hab=1-Data$Grid[[1]]$land_cover,Area.trans=Area,DayHour=DayHour)
+# save(Bearded_effort,file="Bearded_effort.Rda")
+# 
 
 #take a look at where these occur
 #plot_N_map(1,as.matrix(Data$Grid[[20]][["ice_conc"]],ncol=1),highlight=581,Grid=Data$Grid)
 #plot_N_map(1,as.matrix(Data$Grid[[15]][["ice_conc"]],ncol=1),highlight=636,Grid=Data$Grid)
 
-
-save(Mapping,Surveyed,Dat,K,Area_hab,Area_trans,DayHour,Thin,Prop_photo,Hab_cov,Obs_cov,Psi,file="BOSS_data_2012.Rda")
+Knot_loc = XY[Which.include,]
+save(Mapping,Surveyed,Dat,K,Knot_loc,Coords,Area_hab,Area_trans,DayHour,Prop_photo,Hab_cov,VC_psi,Beta_psi,Psi,file="BOSS_data_TMB_2012.Rda")
 
