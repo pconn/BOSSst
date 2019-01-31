@@ -131,8 +131,6 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER(n_s); //number of cells
   DATA_INTEGER(n_sp); //number of species
   
-  DATA_VECTOR( thin_logit_i );         // thinning "parameter" for each surveyed location (assumed MVN on logit scale)
-  DATA_VECTOR(MisID_pars);   //confusion matrix estimates (mlogit scale)
   DATA_IVECTOR(Which_counts_model);  //which counts to actually model... e.g. may want to discard some if area sampled is too small
   DATA_IVECTOR(Which_obs_sp);  //which species each observation type is associated with
   DATA_VECTOR(h_mean);  //mean of haulout distributions for each species - use in penalty
@@ -145,6 +143,9 @@ Type objective_function<Type>::operator() ()
   PARAMETER_VECTOR( thin_beta_day );     //extra day and day^2 effects
   PARAMETER_VECTOR(phi_log);  //tweedie phi
   PARAMETER_VECTOR(p_logit);  // tweedie power
+
+  PARAMETER_VECTOR( thin_logit_i );         // thinning "parameter" for each surveyed location (assumed MVN on logit scale)
+  PARAMETER_VECTOR(MisID_pars);   //confusion matrix estimates (mlogit scale)
   
   
   // derived sizes
@@ -175,21 +176,22 @@ Type objective_function<Type>::operator() ()
   matrix<Type> Thin_i(n_sp,n_i);
   matrix<Type> Thin_trans(n_sp,n_i);
   vector<Type> Day_effect(n_i);
-  Day_effect = X_day * thin_beta_day;
   vector<Type> h_mean_obs(n_sp);
+  Day_effect = X_day * thin_beta_day;
   h_mean_obs = h_mean_obs.setZero();
 
   for (int isp = 0; isp<n_sp; isp++) {
 	for( int i=0;i<n_i_real;i++){
-      Thin_trans(isp,i)=1/(1+exp(-thin_mu_logit(n_i*isp+i)-Day_effect(n_i*isp+i)));
-      //Thin_trans(isp,i)=1/(1+exp(-thin_logit_i(n_i*isp+i)-Day_effect(n_i*isp+i)));
+      //Thin_trans(isp,i)=1/(1+exp(-thin_mu_logit(n_i*isp+i)-Day_effect(n_i*isp+i)));
+      Thin_trans(isp,i)=1/(1+exp(-thin_logit_i(n_i*isp+i)-Day_effect(n_i*isp+i)));
       Thin_i(isp,i)=P_i(i)*A_s(S_i(i))*Thin_trans(isp,i);
 	  h_mean_obs(isp) += Thin_trans(isp, i);
     }
 	h_mean_obs(isp) = h_mean_obs(isp) / n_i_real;
   }
-  for( int i=n_i_real;i<n_i;i++){
-    for(int isp=0;isp<n_sp;isp++){
+ 
+  for (int isp = 0; isp<n_sp; isp++) {
+	for( int i=n_i_real;i<n_i;i++){
       Thin_trans(isp,i)=1/(1+exp(-thin_mu_logit(n_i*isp+i)));
       //Thin_trans(isp,i)=1/(1+exp(-thin_logit_i(n_i*isp+i)-Day_effect(n_i*isp+i)));
       Thin_i(isp,i)=P_i(i)*A_s(S_i(i))*Thin_trans(isp,i);
@@ -265,12 +267,11 @@ Type objective_function<Type>::operator() ()
   // // Probability of thinning and misID parameters (MVN prior/penalty)
   
   //jnll_comp(2) = 0.0;
-  //jnll_comp(1) = neg_log_density_thin(thin_logit_i-thin_mu_logit-Day_effect);
+  jnll_comp(1) = neg_log_density_thin(thin_logit_i-thin_mu_logit-Day_effect);
   for(int ispeff = 0; ispeff<(n_sp*2);ispeff++) jnll_comp(1) += pow(thin_beta_day(ispeff),2.0);  //ridge reg
   for (int isp = 0; isp < n_sp; isp++)jnll_comp(1) += 1000000000.0 * pow(h_mean_obs(isp) - h_mean(isp), 2.0);
-
   //std::cout<<"thin dens "<<jnll_comp(1)<<'\n';
-  //jnll_comp(2) = neg_log_density_misID(MisID_pars-MisID_mu);
+  jnll_comp(2) = neg_log_density_misID(MisID_pars-MisID_mu);
 
   //matrix<Type> total_abundance(n_sp,n_t);
   //for(int isp=0;isp<n_sp;isp++){
@@ -282,6 +283,7 @@ Type objective_function<Type>::operator() ()
   // Total objective
    Type jnll = jnll_comp.sum();
 
+   //std::cout << jnll_comp << "\n";
   //std::cout<<"Range "<<Range_eta<<"\n";
    REPORT( N );
    REPORT( Z_s );
@@ -299,6 +301,7 @@ Type objective_function<Type>::operator() ()
    REPORT( E_count_obs);
    REPORT( phi );
    REPORT( power);
+   REPORT(h_mean_obs);
 
   // Bias correction output
   ADREPORT( N);

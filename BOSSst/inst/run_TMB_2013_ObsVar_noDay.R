@@ -17,13 +17,13 @@ library( TMBhelper)  #install w/ devtools::install_github("kaskr/TMB_contrib_R/T
 #library( mvtnorm)
 #library(TMBdebug)
 
-load('BOSS_data_TMB_2012.Rda')
-load('detection_priors.RData')
+load('BOSS_data_TMB_2013.Rda')
+load('detection_priors2013.RData')
 
 # Compile
 setwd("C:/Users/paul.conn/git/BOSSst/")
 
-TmbFile = "C:/Users/paul.conn/git/BOSSst/BOSSst/src/BossTMB_noST_fixObs_tweedie"
+TmbFile = "C:/Users/paul.conn/git/BOSSst/BOSSst/src/BossTMB_noST_tweedie"
 #dyn.unload( dynlib(TmbFile) )  #unload file if previously loaded to get proper write permission
 compile(paste0(TmbFile,".cpp"),"-O1 -g",DLLFLAGS="") 
 
@@ -32,7 +32,7 @@ compile(paste0(TmbFile,".cpp"),"-O1 -g",DLLFLAGS="")
 #compile(paste0(TmbFile,".cpp"),"-O1 -g",DLLFLAGS="") 
 
 n_cells = length(Area_hab)
-t_steps = 29
+t_steps = 30
 #require(STabundance)
 source('c:/users/paul.conn/git/OkhotskST/OkhotskSeal/R/util_funcs.R')
 #source('./OkhotskSeal/R/sim_funcs.R')
@@ -46,27 +46,27 @@ Which_counts_model = which(Area_trans>area_thresh)
 n_species = 4
 n_samp = nrow(DayHour)
 n_obs_types = 3*n_species+1 #3 certainty levels for each species + an 'unknown' category
-
+n_zeroes = sum(Area_trans==0.9)
 
 #misID_fix = c(10,10,10)  #which column of confusion matrix to fix to 1.0 on the multinomial logit scale for each species
-Thin_zero = rep(0.9,100)
+Thin_zero = rep(0.9,n_zeroes)
 Thin = c(Det_priors$p_sd,Thin_zero,Det_priors$p_rn,Thin_zero,Det_priors$p_bd,Thin_zero,Det_priors$p_rd,Thin_zero)
 
 Sigma_thin = vector("list",n_species)
 Sigma_thin[[1]]=Det_priors$Var_sd
-Sigma_thin[[2]]=diag(100)*0.0001
+Sigma_thin[[2]]=diag(n_zeroes)*0.0001
 Sigma_thin[[3]]=Det_priors$Var_rn
-Sigma_thin[[4]]=diag(100)*0.0001
+Sigma_thin[[4]]=diag(n_zeroes)*0.0001
 Sigma_thin[[5]]=Det_priors$Var_bd
-Sigma_thin[[6]]=diag(100)*0.0001
+Sigma_thin[[6]]=diag(n_zeroes)*0.0001
 Sigma_thin[[7]]=Det_priors$Var_sd  #set variance for ringed = the variance for spotted
-Sigma_thin[[8]]=diag(100)*0.0001
+Sigma_thin[[8]]=diag(n_zeroes)*0.0001
 #convert into block diagonal 
 Sigma_thin = as.matrix(bdiag(Sigma_thin))
 Sigma_thin = as(Sigma_thin,"dgTMatrix")
 
 #compute logit scale distribution using delta method
-diff_logit <- function(x) exp(x)/(1+exp(x))^2
+diff_logit <- function(x) -1/(x*(x-1))
 Thin_logit = log(Thin/(1-Thin))
 Diff_logit = diag(diff_logit(Thin))
 Sigma_logit_thin = Diff_logit %*% Sigma_thin %*% t(Diff_logit)
@@ -118,20 +118,29 @@ X_s = Hab_cov[,c(2,4,5,6,7,8,10,11,12)]
 X_s[,"depth"]=sign(X_s[,"depth"])*abs(X_s[,"depth"])^(1/3)
 X_s[,"depth2"]=(X_s[,"depth"])^2
 
-Data = list( "Options_vec"=Options_vec, "C_i"=C_i, "P_i"=Area_trans,"A_s"=rep(Area_hab,t_steps),"S_i"=S_i-1,"X_s"=as.matrix(X_s),"thin_mu_logit"=Thin_logit,"Sigma_logit_thin"=Matrix(Sigma_logit_thin),"X_day"=X_day,"MisID_mu"=MisID_pars,"MisID_Sigma"=MisID_Sigma,"MisID_pos_rows"=MisID_pos_rows-1,"MisID_pos_cols"=MisID_pos_cols-1,"MisID_zero_cols"=MisID_zero_cols-1,"n_s" = n_cells, "n_sp" = n_species,"thin_logit_i"=Thin_logit,"MisID_pars"=MisID_pars,"Which_counts_model"=Which_counts_model-1,"Which_obs_sp"=c(0,0,0,1,1,1,2,2,2,3,3,3,1),"n_i_real"=n_samp-100,"h_mean"=c(mean(Det_priors$p_sd),mean(Det_priors$p_rn),mean(Det_priors$p_bd),mean(Det_priors$p_rd)))
 
+Data = list( "Options_vec"=Options_vec, "C_i"=C_i, "P_i"=Area_trans,"A_s"=rep(Area_hab,t_steps),"S_i"=S_i-1,"X_s"=as.matrix(X_s),"thin_mu_logit"=Thin_logit,"Sigma_logit_thin"=Matrix(Sigma_logit_thin),"X_day"=X_day,"MisID_mu"=MisID_pars,"MisID_Sigma"=MisID_Sigma,"MisID_pos_rows"=MisID_pos_rows-1,"MisID_pos_cols"=MisID_pos_cols-1,"MisID_zero_cols"=MisID_zero_cols-1,"n_s" = n_cells, "n_sp" = n_species,"thin_logit_i"=Thin_logit,"MisID_pars"=MisID_pars,"Which_counts_model"=Which_counts_model-1,"Which_obs_sp"=c(0,0,0,1,1,1,2,2,2,3,3,3,1),"n_i_real"=n_samp-n_zeroes,"h_mean"=c(mean(Det_priors$p_sd),mean(Det_priors$p_rn),mean(Det_priors$p_bd),mean(Det_priors$p_rd)))
+save(Data,file="Data2013.RData")
 
-# Parameters / Initial values - set close to truth for faster convergence
 Beta_init = matrix(0,n_species,ncol(Data$X_s))
-#Params = list("log_N"=log(c(200000,80000,100000,100000)),"Beta"=Beta_init,"thin_logit_i"=Thin_logit,"thin_beta_day"=rep(0,2*n_species),"MisID_pars"=MisID_pars)
-Params = list("log_N"=log(c(200000,80000,100000,100000)),"Beta"=Beta_init,"thin_beta_day"=rep(0,2*n_species),"phi_log"=rep(-1,4),"p_logit"=rep(0,4))
+# Parameters / Initial values - set close to truth for faster convergence
+load('tweedie_noObsVar_noDay_2013.RData') 
+Report=Out$Report
+Params = list("log_N"=log(Report$N),"Beta"=Report$Beta,"thin_beta_day"=Report$thin_beta_day,"phi_log"=log(Report$phi),"p_logit"=log((Report$power-1)/(1-(Report$power-1))),"thin_logit_i"=Thin_logit,"MisID_pars"=MisID_pars)
+
+#Params = list("log_N"=log(c(200000,80000,100000,100000)),"Beta"=Beta_init,"thin_beta_day"=rep(0,2*n_species),"phi_log"=rep(-1,4),"p_logit"=rep(0,4),"thin_logit_i"=Thin_logit,"MisID_pars"=MisID_pars)
 
 # Random
 Random = NULL
+#Random = c("thin_logit_i","MisID_pars")
 
 # Fix parameters
 Map = list()
-#Map[["thin_beta_day"]]=factor(rep(NA,length(Params$thin_beta_day)))
+Map[["thin_beta_day"]]=factor(rep(NA,length(Params$thin_beta_day)))
+#Map[["MisID_pars"]]=factor(rep(NA,length(Params$MisID_pars)))
+#Map[["thin_logit_i"]]=factor(rep(NA,length(Params$thin_logit_i)))
+#Map[["p_logit"]]=factor(rep(NA,length(Params$p_logit)))
+#Map[["phi_log"]]=factor(rep(NA,length(Params$phi_log)))
 
 
 # Make object
@@ -154,9 +163,53 @@ Opt = nlminb( start=Obj$par, objective=Obj$fn, gradient=Obj$gr, lower=Lower, upp
 #Opt[["diagnostics"]] = data.frame( "Param"=names(Obj$par), "Lower"=-Inf, "Est"=Opt$par, "Upper"=Inf, "gradient"=Obj$gr(Opt$par) )
 Report = Obj$report()
 
-save(Report,file="tweedie_noObsVar_dayEff.RData")
 
-cat(Sys.time() - start.time)
+Params = list("log_N"=log(Report$N),"Beta"=Report$Beta,"thin_beta_day"=Report$thin_beta_day,"phi_log"=log(Report$phi),"p_logit"=log((Report$power-1)/(1-(Report$power-1))),"thin_logit_i"=Report$thin_logit_i,"MisID_pars"=MisID_pars)
+
+#Params = list("log_N"=log(c(200000,80000,100000,100000)),"Beta"=Beta_init,"thin_beta_day"=rep(0,2*n_species),"phi_log"=rep(-1,4),"p_logit"=rep(0,4),"thin_logit_i"=Thin_logit,"MisID_pars"=MisID_pars)
+
+# Random
+#Random = NULL
+Random = c("thin_logit_i","MisID_pars")
+
+# Fix parameters
+Map = list()
+Map[["thin_beta_day"]]=factor(rep(NA,length(Params$thin_beta_day)))
+#Map[["MisID_pars"]]=factor(rep(NA,length(Params$MisID_pars)))
+#Map[["thin_logit_i"]]=factor(rep(NA,length(Params$thin_logit_i)))
+#Map[["p_logit"]]=factor(rep(NA,length(Params$p_logit)))
+#Map[["phi_log"]]=factor(rep(NA,length(Params$phi_log)))
+
+
+# Make object
+#compile( paste0(Version,".cpp") )
+dyn.load( dynlib(TmbFile) )
+Start_time = Sys.time()
+#setwd( "C:/Users/paul.conn/git/OkhotskST/OkhotskSeal/src/")
+Obj = MakeADFun( data=Data, parameters=Params, random=Random, map=Map, silent=FALSE)
+Obj$fn( Obj$par )
+#image(Obj$env$spHess(random=TRUE))  #look at covariance structure
+
+# Run
+#Lower = -Inf
+#Upper = Inf
+start.time = Sys.time()
+Lower = -50  #trying to prevent -Inf,Inf bounds resulting in nlminb failure (NaN gradient)
+Upper = 50
+#Opt = Optimize(obj=Obj,newtonsteps=2,lower=-50,upper=50,loopnum=1,bias.correct=TRUE)
+Opt = nlminb( start=Obj$par, objective=Obj$fn, gradient=Obj$gr, lower=Lower, upper=Upper, control=list(trace=1, eval.max=500, iter.max=500))         #
+#Opt[["diagnostics"]] = data.frame( "Param"=names(Obj$par), "Lower"=-Inf, "Est"=Opt$par, "Upper"=Inf, "gradient"=Obj$gr(Opt$par) )
+Report = Obj$report()
+
+
+Sys.time() - start.time
+
+SD = sdreport( Obj, par.fixed=Opt$par,bias.correct=FALSE )
+
+Out = list(Report=Report,SD=SD)
+save(Out,file="tweedie_ObsVar_noDay_2013.RData")
+
+
 # Potentially fix random fields with zero sample or population variance
 #if( any(Report$MargSD_z<0.001) ){
 #Which = which(Report$MargSD_z<0.001)
@@ -177,7 +230,7 @@ cat(Sys.time() - start.time)
 Coords2=Coords
 Coords2[,1] = round(Coords2[,1])
 Coords2[,2] = round(Coords2[,2])
-plot_N_map_xy(N=Report$Z_s[3,1:n_cells],XY=Coords2,leg.title="Abundance")
+plot_N_map_xy(N=Report$Z_s[1,1:n_cells],XY=Coords2,leg.title="Abundance")
 #cur_day=10
 #plot_N_map_xy(N=Report$Z_s[1,((cur_day-1)*n_cells+1):(cur_day*n_cells)],XY=loc_s,leg.title="Abundance")
 
@@ -206,25 +259,26 @@ plot_N_map_xy(N=crap,XY=Coords3,leg.title="Count")
 Count = rowSums(Report$E_count_obs[,4:6])
 Coords3 = Coords2[Mapping[,1],]
 plot_N_map_xy(N=Count,XY=Coords3,leg.title="Count")
-  
+
 Count = Report$E_count_sp[2,]
 Coords3 = Coords2[Mapping[,1],]
 plot_N_map_xy(N=Count,XY=Coords3,leg.title="Count")
 
 # 
 #plot thinning by day
+par(mfrow=c(2,2))
 sp=1
-plot(DayHour[1:1185,1],Report$Thin_trans[sp,1:1185])
-points(DayHour[1:1185,1],plogis(Data$thin_mu_logit[(sp-1)*1285+c(1:1185)]),col='red')
+plot(DayHour[1:Data$n_i_real,1],Report$Thin_trans[sp,1:Data$n_i_real],xlab='Survey day',ylab='Detection probability')
+points(DayHour[1:Data$n_i_real,1],plogis(Data$thin_mu_logit[(sp-1)*n_samp+c(1:Data$n_i_real)]),col='red')
 sp=2
-plot(DayHour[1:1185,1],Report$Thin_trans[sp,1:1185])
-points(DayHour[1:1185,1],plogis(Data$thin_mu_logit[(sp-1)*1285+c(1:1185)]),col='red')
+plot(DayHour[1:Data$n_i_real,1],Report$Thin_trans[sp,1:Data$n_i_real],xlab='Survey day',ylab='Detection probability')
+points(DayHour[1:Data$n_i_real,1],plogis(Data$thin_mu_logit[(sp-1)*n_samp+c(1:Data$n_i_real)]),col='red')
 sp=3
-plot(DayHour[1:1185,1],Report$Thin_trans[sp,1:1185])
-points(DayHour[1:1185,1],plogis(Data$thin_mu_logit[(sp-1)*1285+c(1:1185)]),col='red')
+plot(DayHour[1:Data$n_i_real,1],Report$Thin_trans[sp,1:Data$n_i_real],xlab='Survey day',ylab='Detection probability')
+points(DayHour[1:Data$n_i_real,1],plogis(Data$thin_mu_logit[(sp-1)*n_samp+c(1:Data$n_i_real)]),col='red')
 sp=4
-plot(DayHour[1:1185,1],Report$Thin_trans[sp,1:1185])
-points(DayHour[1:1185,1],plogis(Data$thin_mu_logit[(sp-1)*1285+c(1:1185)]),col='red')
+plot(DayHour[1:Data$n_i_real,1],Report$Thin_trans[sp,1:Data$n_i_real],xlab='Survey day',ylab='Detection probability')
+points(DayHour[1:Data$n_i_real,1],plogis(Data$thin_mu_logit[(sp-1)*n_samp+c(1:Data$n_i_real)]),col='red')
 
 #look at proportion of zeroes
 library(tweedie)
