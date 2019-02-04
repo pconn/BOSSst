@@ -1,0 +1,14 @@
+Package: BOSSst
+Type: Package
+Title: Spatio-temporal abundance estimation for Bering-Okhotsk Seal Surveys
+Version: 0.1
+Date: 2019-02-04
+Author: Paul B. Conn
+Maintainer: Paul B. Conn <paul.conn@noaa.gov>
+Description: Code to analyze seal counts obtained during instrument-based aerial surveys in the eastern Bering Sea. Analysis is via the TMB package.
+License: GNU GENERAL PUBLIC LICENSE, Version 2
+LinkingTo: TMB, RcppEigen
+Depends:
+    TMB
+
+
