@@ -5,7 +5,7 @@ library( TMB )
 data(Data2012)
 
 # Compile
-TmbFile = "./BOSSst/src/BossTMB_noST_tweedie"  #adjust if needed based on working directory
+TmbFile = "./BOSSst/src/BossSt"  #adjust if needed based on working directory
 #dyn.unload( dynlib(TmbFile) )  #unload file if previously loaded to get proper write permission
 compile(paste0(TmbFile,".cpp"),"-O1 -g",DLLFLAGS="") 
 

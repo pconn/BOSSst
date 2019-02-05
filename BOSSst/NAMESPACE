@@ -1,1 +1,1 @@
-useDynLib(BossTMB_noST_tweedie)
+useDynLib(BOSSst)

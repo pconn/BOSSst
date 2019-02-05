@@ -12,7 +12,7 @@ data(Data2013)
 # Compile
 #setwd("C:/Users/paul.conn/git/BOSSst/")
 
-TmbFile = "./BOSSst/src/BossTMB_noST_tweedie"  #note: edit depending on your working directory
+TmbFile = "./BOSSst/src/BossSt"  #note: edit depending on your working directory
 #dyn.unload( dynlib(TmbFile) )  #unload file if previously loaded to get proper write permission
 compile(paste0(TmbFile,".cpp"),"-O1 -g",DLLFLAGS="") 
 
